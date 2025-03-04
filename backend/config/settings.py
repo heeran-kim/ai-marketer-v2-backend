@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'social',
     'posts',
     'promotions',
+    'ai',
     "django_extensions",
 ]
 
