@@ -1,0 +1,17 @@
+# Ignore environment variables
+backend/.env
+
+# Python-related ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+
+# Django-related ignores
+media/
+staticfiles/
+test/
+
+# Ignore .pem
+*.pem

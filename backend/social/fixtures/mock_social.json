@@ -1,0 +1,32 @@
+[
+    {
+    "model": "social.socialmedia",
+    "pk": 1,
+    "fields": {
+        "business":1,
+        "platform":"instagram",
+        "link":"instagram.com/the-great-steakhouse",
+        "username":"the-great-steakhouse"
+    }
+    },
+    {
+    "model": "social.socialmedia",
+    "pk": 2,
+    "fields": {
+        "business":1,
+        "platform":"facebook",
+        "link":"facebook.com/the-great-steakhouse",
+        "username":"the-great-steakhouse"
+    }
+    },
+    {
+    "model": "social.socialmedia",
+    "pk": 3,
+    "fields": {
+        "business":1,
+        "platform":"twitter",
+        "link":"x.com/the-great-steakhouse",
+        "username":"the-great-steakhouse"
+    }
+    }
+]

@@ -1,0 +1,24 @@
+services:
+  - name: backend
+    type: web
+    runtime: docker
+    env: docker
+    repo: https://github.com/heeran-kim/ai-marketer-v2-backend
+    branch: main
+    plan: free
+    dockerfilePath: backend/Dockerfile.render
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: postgres
+          property: connectionString
+      - key: USE_RENDER_DB
+        value: "true"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://localhost:3000" # add your production site URLs (e.g., "https://your-frontend-url.com,https://your-backend-url.com")
+      - key: ALLOWED_HOSTS
+        value: "localhost,127.0.0.1,0.0.0.0" # add your production domains (e.g., "your-frontend-url.com,your-backend-url.com")
+
+databases:
+  - name: postgres
+    plan: free
