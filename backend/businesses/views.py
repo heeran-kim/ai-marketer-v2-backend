@@ -5,7 +5,7 @@ from django.forms.models import model_to_dict
 from businesses.models import Business
 from social.models import SocialMedia
 from posts.models import Post
-from config.constants import DEFAULT_LOGO_URL
+from config.constants import DEFAULT_LOGO_URL, SOCIAL_PLATFORMS
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -17,14 +17,18 @@ def get_dashboard_data(request):
 
     logo_url = getattr(business.logo, "url", DEFAULT_LOGO_URL)
 
-    social_media = SocialMedia.objects.filter(business=business)
-    social_media_data = [
+    linked_platforms_queryset = SocialMedia.objects.filter(business=business)
+    linked_platforms = [
         {
-            "platform": sm.platform,
-            "link": sm.link,
-            "username": sm.username,
+            "key": linked_platform.platform,
+            "label": next(
+                (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
+                linked_platform.platform
+            ),
+            "link": linked_platform.link,
+            "username": linked_platform.username,
         }
-        for sm in social_media
+        for linked_platform in linked_platforms_queryset
     ]
 
     posts = Post.objects.filter(business=business)
@@ -43,7 +47,7 @@ def get_dashboard_data(request):
             "name": business.name,
             "logo": logo_url,
         },
-        "socialMedia": social_media_data,
+        "linkedPlatforms": linked_platforms,
         "postsSummary": posts_summary,
     }
 
