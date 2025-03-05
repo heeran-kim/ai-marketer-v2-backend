@@ -2,7 +2,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+import time
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -13,6 +13,7 @@ def analyse_image(request):
         return Response({"error": "No image uploaded"}, status=400)
 
     # TODO: CALL AI MODEL TO ANALYSE IMAGE
+    time.sleep(1.5)
     MOCK_DETECTED_ITEMS = ["Steak", "Grilled Meat", "Garlic", "Herbs", "Lemon", "Lamb"]
 
 
@@ -28,6 +29,7 @@ def generate_caption(request):
     """Generate AI-powered captions (Mock Data for now)"""
 
     # TODO: CALL AI MODEL TO GENERATE CAPTIONS
+    time.sleep(1.5)
     MOCK_GENERATED_CAPTIONS = [
         "🔥 New Menu Alert! 🔥\nExperience the perfect balance of smoky grilled steak, fresh herbs, and a zesty lemon kick. 🍋🥩 Our new menu is designed for true food lovers who crave bold flavors in a cozy, premium dining atmosphere. 🍷✨\n📍 Available now – tag your foodie friends and come try it! #NewMenu #SteakLover #PremiumDining",
         "Indulge in perfection. 🥩✨\nJuicy, tender, and grilled to perfection – our newest menu item is here to elevate your dining experience. A hint of garlic, fresh herbs, and a citrus twist make every bite unforgettable. 🍋🔥\nTag someone who needs to try this! #FoodieHeaven #SteakGoals #NewMenu",
