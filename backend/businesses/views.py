@@ -13,7 +13,12 @@ def get_dashboard_data(request):
     business = Business.objects.filter(owner=request.user).first()
 
     if not business:
-        return Response({"error": "Business not found"}, status=404)
+        # Return consistent structure with null/empty values
+        return Response({
+            "business": None,
+            "linkedPlatforms": [],
+            "postsSummary": None
+        })
 
     logo_url = getattr(business.logo, "url", DEFAULT_LOGO_URL)
 
