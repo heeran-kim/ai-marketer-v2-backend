@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 class CustomJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):
-        logger.info(f"🛠 Checking request.COOKIES: {request.COOKIES}")  # ✅ 디버깅 로그 추가
+        logger.info(f"🛠 Checking request.COOKIES: {request.COOKIES}")
 
         token = request.COOKIES.get(settings.SIMPLE_JWT["AUTH_COOKIE"])
         if token is None:

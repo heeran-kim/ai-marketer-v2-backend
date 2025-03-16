@@ -2,10 +2,17 @@
 
 set -e  # Exit immediately if a command fails
 
+ENV_FILE="/app/.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+  touch "$ENV_FILE"
+fi
+
 echo "Checking for SECRET_KEY in .env..."
-if ! grep -q "SECRET_KEY=" /app/.env; then
+if ! grep -q "^SECRET_KEY=" "$ENV_FILE"; then
   echo "Generating SECRET_KEY..."
-  echo "SECRET_KEY=$(python -c 'from django.core.management.utils import get_random_secret_key(); print(get_random_secret_key())')" >> /app/.env
+  SECRET_KEY=$(python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())")
+  echo "SECRET_KEY=$SECRET_KEY" >> "$ENV_FILE"
 fi
 
 echo "Making database migrations..."

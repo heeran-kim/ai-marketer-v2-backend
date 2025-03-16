@@ -5,7 +5,7 @@
     "fields": {
         "business":1,
         "platform":"instagram",
-        "link":"instagram.com/the-great-steakhouse",
+        "link":"https://instagram.com/the-great-steakhouse",
         "username":"the-great-steakhouse"
     }
     },
@@ -15,7 +15,7 @@
     "fields": {
         "business":1,
         "platform":"facebook",
-        "link":"facebook.com/the-great-steakhouse",
+        "link":"https://facebook.com/the-great-steakhouse",
         "username":"the-great-steakhouse"
     }
     },
@@ -25,7 +25,7 @@
     "fields": {
         "business":1,
         "platform":"twitter",
-        "link":"x.com/the-great-steakhouse",
+        "link":"https://x.com/the-great-steakhouse",
         "username":"the-great-steakhouse"
     }
     }
