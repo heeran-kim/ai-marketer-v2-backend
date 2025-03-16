@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.forms.models import model_to_dict
 from businesses.models import Business
 from social.models import SocialMedia
+from social.serializers import SocialMediaSerializer
 from posts.models import Post
 from config.constants import DEFAULT_LOGO_URL, SOCIAL_PLATFORMS
 
@@ -23,18 +24,7 @@ def get_dashboard_data(request):
     logo_url = getattr(business.logo, "url", DEFAULT_LOGO_URL)
 
     linked_platforms_queryset = SocialMedia.objects.filter(business=business)
-    linked_platforms = [
-        {
-            "key": linked_platform.platform,
-            "label": next(
-                (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
-                linked_platform.platform
-            ),
-            "link": linked_platform.link,
-            "username": linked_platform.username,
-        }
-        for linked_platform in linked_platforms_queryset
-    ]
+    linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
 
     posts = Post.objects.filter(business=business)
     last_post = posts.order_by("-created_at").first()
@@ -62,10 +52,18 @@ def get_dashboard_data(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_business_data(request):
+    """Fetches business details of the authenticated user, returns empty values if no business is found."""
     business = Business.objects.filter(owner=request.user).first()
 
     if not business:
-        return Response({"error": "Business not found"}, status=404)
+        # Return a structured response with null/empty values instead of an error.
+        return Response({
+            "name": None,
+            "logo": DEFAULT_LOGO_URL,
+            "category": None,
+            "target": None,
+            "vibe": None
+        }, status=200)  # Keep 200 status for a successful request.
 
     business_data = model_to_dict(business)
 

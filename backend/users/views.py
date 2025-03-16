@@ -1,15 +1,17 @@
+from rest_framework.parsers import JSONParser
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, LoginSerializer
+from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.authentication import CustomJWTAuthentication
 from django.conf import settings
 import logging
-
-# docker exec -it promoease-backend-backend-1 python test/test_views.py
+from drf_spectacular.utils import extend_schema
+from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
 
 # Get the custom User model
 User = get_user_model()
@@ -17,23 +19,19 @@ User = get_user_model()
 # Setup logger for debugging and tracking requests
 logger = logging.getLogger(__name__)
 
+
+@extend_schema(**register_schema)
 class RegisterView(generics.CreateAPIView):
     """
-    API for user registration.
-    Uses Django Rest Framework's `CreateAPIView`, which automatically handles:
-    - Data validation (`serializer.is_valid()`)
-    - Object creation (`serializer.save()`)
-    - Returning an HTTP 201 response on success
+    API for user registration
     """
     permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
     serializer_class = RegisterSerializer
 
     def create(self, request, *args, **kwargs):
         """
-        Overrides the default `create()` method of `CreateAPIView`.
-        - Logs request data for debugging
-        - Calls the parent `create()` method to handle registration
-        - Modifies the response to return a custom success message
+        Handles user registration.
         """
         response = super().create(request, *args, **kwargs)
         response.data = {"message": "User created successfully"}
@@ -43,22 +41,35 @@ class RegisterView(generics.CreateAPIView):
 class LoginView(APIView):
     """
     API for user authentication.
-    - Accepts email & password as input
     - Returns access & refresh tokens if authentication is successful
     - Stores the access token in HttpOnly Secure Cookie
     """
     permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
 
+    def get_serializer_class(self):
+        """Returns the appropriate serializer based on the login method"""
+        strategy_map = {
+            "traditional": TraditionalLoginSerializer,
+            "social": SocialLoginSerializer,
+            "passkey": PasskeyLoginSerializer,
+            "2fa": TwoFactorVerificationSerializer,
+        }
+        return strategy_map.get(self.request.data.get('method', 'traditional'))
+
+    @extend_schema(**login_schema)
     def post(self, request):
-        """
-        Handles user login requests.
-        - Uses `LoginSerializer` to validate and authenticate the user
-        - If successful, returns JWT access & refresh tokens
-        - Stores access token in a secure HttpOnly cookie
-        """
-        serializer = LoginSerializer(data=request.data)
+        """Handles user login requests dynamically"""
+        serializer_class = self.get_serializer_class()
+        if not serializer_class:
+            return Response(
+                {"error": f"Unsupported login method: {request.data.method}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = serializer_class(data=request.data.get("credentials", {}))
         serializer.is_valid(raise_exception=True)
-        tokens = serializer.validated_data  # Returns {'access': ..., 'refresh': ...}
+        tokens = serializer.validated_data
 
         response = Response({
             "message": "Login successful",
@@ -77,6 +88,25 @@ class LoginView(APIView):
         # Return the refresh token in the response (frontend can store it securely)
         return response
 
+class UserProfileView(APIView):
+    """
+    API to get the currently authenticated user's information.
+    Requires the user to be logged in (JWT authentication).
+    """
+    authentication_classes = [CustomJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(**me_schema)
+    def get(self, request):
+        """
+        Retrieves user profile details from the authenticated request.
+        """
+        user = request.user
+        return Response({
+            "email": user.email,
+            "name": user.name,
+            "role": user.role
+        })
 
 class LogoutView(APIView):
     """
@@ -86,6 +116,7 @@ class LogoutView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**logout_schema)
     def post(self, request):
         """
         Handles user logout by blacklisting the refresh token.
@@ -119,63 +150,28 @@ class LogoutView(APIView):
         return response
 
 
-class UserProfileView(APIView):
-    """
-    API to get the currently authenticated user's information.
-    Requires the user to be logged in (JWT authentication).
-    """
-    authentication_classes = [CustomJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+class ForgotPasswordView(GenericAPIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    serializer_class = ForgotPasswordSerializer
 
-    def get(self, request):
-        """
-        Retrieves user profile details from the authenticated request.
-        """
-        user = request.user
-        return Response({
-            "email": user.email,
-            "name": user.name,
-            "role": user.role
-        })
-
-class RefreshTokenView(APIView):
-    """
-    API to refresh access token using the stored refresh token.
-    - If the refresh token is valid, returns a new access and refresh token.
-    - If invalid or expired, requires re-authentication.
-    """
-    permission_classes = [AllowAny]  # No authentication required, only valid refresh token needed
-
+    @extend_schema(**forgot_password_schema)
     def post(self, request):
-        """
-        Handles refresh token requests.
-        - Extracts refresh token
-        - Generates a new access token and refresh token if valid
-        """
-        refresh_token = request.data.get("refresh") # Get refresh token from request body
-        if not refresh_token:
-            return Response({"error": "Refresh token is missing"}, status=status.HTTP_401_UNAUTHORIZED)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
 
-        try:
-            token = RefreshToken(refresh_token)
-            new_access_token = str(token.access_token)
-            new_refresh_token = str(token)
 
-            # Set Access Token as HttpOnly Cookie
-            response = Response({
-                "message": "Access token refreshed",
-                "refresh": new_refresh_token, # Return new refresh token
-            }, status=status.HTTP_200_OK)
+class ResetPasswordView(GenericAPIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    serializer_class = ResetPasswordSerializer
 
-            response.set_cookie(
-                key=settings.SIMPLE_JWT["AUTH_COOKIE"],  # Cookie Name
-                value=new_access_token,  # Save access token
-                httponly=settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"],  # Secure Cookie
-                secure=settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"],  # HTTPS-only
-                samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],  # Cross-site protection
-                max_age=60 * 60 * 24,  # Valid for 1 day
-            )
-            return response
-        except Exception as e:
-            logger.error(f"❌ Failed to refresh token: {e}")
-            return Response({"error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+    @extend_schema(**reset_password_schema)
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"message": "Password has been reset"}, status=status.HTTP_200_OK)
+

@@ -39,7 +39,8 @@ ALLOWED_HOSTS = [
 
 # Application definition
 INSTALLED_APPS = [
-    'rest_framework', # Django REST Framework
+    "drf_spectacular",
+    "rest_framework",
     'rest_framework_simplejwt', # JWT Authentication
     "corsheaders",
     "django.contrib.admin",
@@ -92,6 +93,45 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         "users.authentication.CustomJWTAuthentication", # http cookie
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'AI Marketer V2 API',
+    'DESCRIPTION': 'API documentation for AI Marketer V2, an AI-powered marketing automation platform for restaurants and small businesses.',
+    'VERSION': '1.0.0',
+
+    # Explicitly define tag order and descriptions
+    'TAGS': [
+        {
+            'name': 'users',
+            'description': 'User authentication and account management endpoints. Includes traditional register, login, and logout functionality with JWT tokens stored in HTTP-only cookies. Current implementation supports email-based authentication (✅). Planned future enhancements include forgot password, social media logins (Google, Facebook, Apple), passkey support (Face ID/fingerprint), and 2FA.'
+        },
+        {
+            'name': 'businesses',
+            'description': 'Business profile management for restaurant configuration. Enables business owners to set up and customize their business profile including name, logo, business category, target customers, and business branding/vibe. The current implementation supports basic business information management (✅). Future enhancements will include social media integration and bulk sales data uploads.'
+        },
+        {
+            'name': 'dashboard',
+            'description': 'Business dashboard data and metrics. Provides an overview of key business metrics including post statistics, linked social platforms, and recent activity. Current implementation shows basic business metrics and post summary (✅).'
+        },
+        {
+            'name': 'posts',
+            'description': 'Social media post management system. Allows creating, scheduling, and monitoring posts across multiple platforms. Current implementation supports storing and displaying posts in the database and scheduling functionality (✅). Future features will add social media API integration for live post fetching, automatic publishing of scheduled posts, editing capabilities, comment interaction, and Discord webhook notifications.'
+        },
+        {
+            'name': 'promotions',
+            'description': 'Marketing promotion management. Enables businesses to create, track, and analyze promotional campaigns. Current implementation includes viewing promotions and creating posts from promotions (✅). Future enhancements will add AI-driven promotion suggestions based on sales data and social media trends.'
+        },
+        {
+            'name': 'social',
+            'description': 'Social media platform integration endpoints. Provides functionality to connect, manage, and interact with various social media platforms. Includes linking social accounts to businesses, fetching platform-specific data, and enabling cross-platform publishing capabilities. Current implementation supports platform connection setup (🟡). Future enhancements will include direct comment management, social activity notifications, engagement analytics, and Discord webhook integration for real-time alerts.'
+        },
+        {
+            'name': 'ai',
+            'description': 'AI-powered content creation tools. Provides machine learning capabilities for analyzing images, generating captions, and suggesting hashtags. Frontend implementation of image analysis and caption generation is complete (✅), but backend AI integration is under development. Uses ChatGPT API for natural language processing and will support multi-platform content publishing.'
+        }
+    ],
 }
 
 # Middleware Settings
