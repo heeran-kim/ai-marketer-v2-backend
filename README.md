@@ -138,7 +138,6 @@ Fill in the required values based on your setup.
 
 #### **Example `.env.example` File**:
 ```
-SECRET_KEY=your-secret-key
 DEBUG=False
 
 POSTGRES_NAME=your-db-name

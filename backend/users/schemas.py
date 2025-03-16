@@ -6,17 +6,17 @@ from rest_framework import serializers
 register_schema = {
     'operation_id': 'Register',
     'description': """
-    Create a new user account with email, name, and password (Feature 1.a).
+    Create a new user account with email, name, and password.
     
-    This endpoint allows users to create an account securely. The registration process
-    validates email format and password security. Once registered, the user can log in
-    using their credentials.
+    This endpoint allows users to create an account securely.
+    The registration process validates email format and password security.
+    Once registered, the user can log in using their credentials.
     
-    Implementation status: ✅ Fully implemented (Frontend and Backend)
+    Implementation status: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
     
     Future enhancements:
-    - Will be extended to support social registration (Feature 1.c)
-    - Will support passkey registration for biometric authentication (Feature 1.d)
+    - Will be extended to support social registration - Feature 1.c
+    - Will support passkey registration for biometric authentication - Feature 1.d
     """,
     'request': {
         "application/json": inline_serializer(
@@ -63,18 +63,17 @@ register_schema = {
 login_schema = {
     'operation_id': 'Login',
     'description':  """
-    Authenticate a user and receive tokens (Feature 1.a).
+    Authenticate a user and receive tokens.
     
-    This endpoint enables users to log in using traditional email/password authentication.
-    It returns a refresh token in the response body and sets an access token in an HTTP-only
-    secure cookie for enhanced security.
+    This endpoint allows users to log in using an authentication method that securely verifies credentials.
+    It returns a refresh token in the response body and sets an access token in an HTTP-only secure cookie for enhanced security.
     
-    Implementation status: ✅ Fully implemented (Frontend and Backend)
-    
-    Future enhancements:
-    - Will support social login via OAuth2 with Google, Facebook, Apple (Feature 1.c)
-    - Will support passkey/biometric authentication options (Feature 1.d)
-    - Will support two-factor authentication (Feature 1.e)
+    **Implementation Status**: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
+
+    **Future Enhancements**:
+    - Support for social login via OAuth2 (Google, Facebook, Apple) – Feature 1.c
+    - Integration of passkey/biometric authentication – Feature 1.d
+    - Implementation of two-factor authentication (2FA) – Feature 1.e
     """,
     'responses': {
         200: OpenApiResponse(
@@ -137,13 +136,12 @@ login_schema = {
 me_schema = {
     'operation_id': 'Me',
     'description': """
-    Retrieve the current authenticated user's profile (Feature 1.a).
-    
-    This endpoint returns the profile information of the currently authenticated user,
-    including their email, name, and role. It requires a valid access token provided via 
-    HTTP-only cookie.
-    
-    Implementation status: ✅ Fully implemented (Frontend and Backend)
+    Retrieve the current authenticated user's profile.
+
+    This endpoint returns the profile information of the currently authenticated user, including their email, name, and role.
+    It requires a valid access token provided via an HTTP-only cookie.
+
+    Implementation status: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
     """,
     'responses': {
         200: inline_serializer(
@@ -152,7 +150,33 @@ me_schema = {
                 "email": serializers.EmailField(),
                 "name": serializers.CharField(),
                 "role": serializers.ChoiceField(choices=["admin", "business_owner"]),
+            },
+            default={
+                "email": "user@example.com",
+                "name": "John Doe",
+                "role": "business_owner"
             }
+        ),
+        401: OpenApiResponse(
+            response=inline_serializer(
+                name="UnauthorizedResponse",
+                fields={
+                    "detail": serializers.CharField()
+                }
+            ),
+            description="Unauthorized - Missing or invalid authentication credentials.",
+            examples=[
+                OpenApiExample(
+                    name="Missing Token",
+                    summary="No authentication token provided",
+                    value={"detail": "Authentication credentials were not provided."}
+                ),
+                OpenApiExample(
+                    name="Invalid Token",
+                    summary="Invalid authentication token",
+                    value={"detail": "Invalid token."}
+                )
+            ]
         )
     }
 }
@@ -161,14 +185,14 @@ me_schema = {
 logout_schema = {
     'operation_id': 'Logout',
     'description': """
-    Log out the current user (Feature 1.a).
+    Log out the current user.
     
     This endpoint invalidates the user's authentication by:
     1. Clearing the access token cookie
     2. Blacklisting the refresh token to prevent reuse
     3. Ending the current session
     
-    Implementation status: ✅ Fully implemented (Frontend and Backend)
+    Implementation status: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
     """,
     'responses': {
         200: inline_serializer(
