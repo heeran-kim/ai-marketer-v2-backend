@@ -52,7 +52,7 @@ class PostCreateView(APIView):
 
         response_data = {
             "business": {
-                "target_customers": business.target,
+                "target_customers": business.target_customers,
                 "vibe": business.vibe,
                 "has_sales_data": False, # TODO
             },

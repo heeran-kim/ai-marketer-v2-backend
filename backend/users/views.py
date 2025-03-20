@@ -7,7 +7,6 @@ from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from users.authentication import CustomJWTAuthentication
 from django.conf import settings
 import logging
 from drf_spectacular.utils import extend_schema
@@ -94,7 +93,6 @@ class UserProfileView(APIView):
     API to get the currently authenticated user's information.
     Requires the user to be logged in (JWT authentication).
     """
-    authentication_classes = [CustomJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     @extend_schema(**me_schema)
