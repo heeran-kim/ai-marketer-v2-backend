@@ -59,7 +59,7 @@ class LoginView(APIView):
 
     @extend_schema(**login_schema)
     def post(self, request):
-        """Handles user login requests dynamically"""
+        """Handles user login requests dynamically and generates tokens"""
         serializer_class = self.get_serializer_class()
         if not serializer_class:
             return Response(
@@ -69,17 +69,18 @@ class LoginView(APIView):
 
         serializer = serializer_class(data=request.data.get("credentials", {}))
         serializer.is_valid(raise_exception=True)
-        tokens = serializer.validated_data
+        user = serializer.validated_data # Get authenticated user
+        tokens = RefreshToken.for_user(user) # Generate tokens
 
         response = Response({
             "message": "Login successful",
-            "refresh": tokens["refresh"], # Return refresh token in response
+            "refresh": str(tokens), # Return refresh token in response
         }, status=status.HTTP_200_OK)
 
         # Set JWT access token in HttpOnly Secure Cookie
         response.set_cookie(
             key=settings.SIMPLE_JWT["AUTH_COOKIE"],  # Cookie Name
-            value=tokens["access"],  # Save access token
+            value=str(tokens.access_token),  # Save access token
             httponly=settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"],  # Secure Cookie
             secure=settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"],  # HTTPS-only
             samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],  # Cross-site protection

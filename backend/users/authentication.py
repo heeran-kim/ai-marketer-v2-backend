@@ -11,13 +11,14 @@ class CustomJWTAuthentication(JWTAuthentication):
         token = request.COOKIES.get(settings.SIMPLE_JWT["AUTH_COOKIE"])
         if token is None:
             logger.warning("❌ No access_token found in cookies")
-            return None  # 인증 실패
+            return None
 
         try:
             validated_token = self.get_validated_token(token)
             user = self.get_user(validated_token)
             logger.info(f"✅ Authentication successful for user: {user}")
             return user, validated_token
+
         except Exception as e:
             logger.error(f"❌ JWT Authentication failed: {e}")
-            return None  # 인증 실패
+            return None

@@ -1,63 +1,109 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model() # AUTH_USER_MODEL = 'users.User'
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """Serializer for user registration"""
+    """
+    Serializer for traditional user registration with email & password.
+    This handles creating a new user with encrypted password storage.
+    """
     password = serializers.CharField(write_only=True, min_length=6)
+
     class Meta:
         model = User
         fields = ['name', 'email', 'password', 'role']
         extra_kwargs = {'password': {'write_only': True}}
+
     def create(self, validated_data):
         """Create a new user with encrypted password"""
         return User.objects.create_user(**validated_data)
 
 class TraditionalLoginSerializer(serializers.Serializer):
-    """Traditional login with email & password"""
+    """
+    Serializer for traditional login using email & password.
+
+    - Validates user credentials and returns the authenticated user.
+    - If the user has two-factor authentication (2FA) enabled, authentication will not be completed immediately.
+      Instead, the system will indicate that a second factor (OTP) is required.
+    """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=6)
 
     def validate(self, data):
-        """Authenticate user and generate tokens"""
+        """
+        Authenticate user and return the validated user instance.
+        If 2FA is enabled, raise a validation error indicating further verification is required.
+        """
         user = authenticate(email=data['email'], password=data['password'])
         if not user:
             raise serializers.ValidationError({"error": "Incorrect email or password."})
 
-        refresh = RefreshToken.for_user(user)
-        return {
-            "refresh": str(refresh),
-            "access": str(refresh.access_token)
-        }
+        # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
+
+        return user # Return the authenticated user
 
 class SocialLoginSerializer(serializers.Serializer):
-    """Social login via OAuth2"""
-    provider = serializers.CharField()
+    """
+    Serializer for social login via OAuth2 providers (Google, Facebook, etc.).
+    This handles authentication using third-party access tokens.
+    """
+    provider = serializers.CharField() # Example: "google", "facebook"
     access_token = serializers.CharField()
 
     def validate(self, data):
-        # TODO
+        """
+        Validate the provided access token with the respective OAuth provider.
+
+        - If the token is valid, retrieve the user associated with it.
+        - If no existing user is found, create a new one.
+        - Return the authenticated user.
+        """
+        # TODO: Implement provider-specific OAuth validation and user creation logic
         pass
 
 class PasskeyLoginSerializer(serializers.Serializer):
-    """Passkey authentication"""
+    """
+    Serializer for passkey authentication (WebAuthn/FIDO2).
+    This allows users to authenticate using biometric or security keys.
+    """
     passkey_data = serializers.CharField()
 
     def validate(self, data):
-        # TODO
+        """
+        Validate passkey authentication.
+
+        - If the email exists, authenticate user with stored passkey.
+        - If the email does not exist, create a new user and store the passkey.
+        - Return the authenticated user.
+        """
+        # TODO: Implement WebAuthn passkey registration logic
         pass
 
 class TwoFactorVerificationSerializer(serializers.Serializer):
-    """Two-factor authentication (2FA)"""
+    """
+    Serializer for two-factor authentication (2FA) verification.
+
+    - This is the second step of the authentication process.
+    - Used when a user logs in using traditional login, but 2FA is enabled.
+    - Requires email, password, and OTP (One-Time Password).
+    - Authenticates the user first with email & password.
+    - Then verifies the provided OTP.
+    - If successful, returns the authenticated user.
+    """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=6)
     otp = serializers.CharField()
 
     def validate(self, data):
-        # TODO
+        """
+        Validate user credentials and OTP.
+
+        - First, authenticate the user using email & password.
+        - If authentication is successful, check if the OTP is valid.
+        - If both checks pass, return the authenticated user.
+        """
         pass
 
 class ForgotPasswordSerializer(serializers.Serializer):
