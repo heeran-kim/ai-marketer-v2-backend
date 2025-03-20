@@ -1,7 +1,7 @@
+# backend/businesses/urls.py
 from django.urls import path
-from .views import get_dashboard_data, get_business_data
+from .views import BusinessDetailView
 
 urlpatterns = [
-    path("dashboard/", get_dashboard_data, name="dashboard-data"),
-    path("businesses/me/", get_business_data, name="business-data"),
+    path("me/", BusinessDetailView.as_view(), name="business-detail"),
 ]
