@@ -6,7 +6,7 @@
         "name":"The Great Steakhouse",
         "logo":"/the-great-steakhouse.jpg",
         "category":"Restaurant",
-        "target":"18-35 years old, mostly foodies",
+        "target_customers":"18-35 years old, mostly foodies",
         "vibe":"Cozy & premium dining experience",
         "owner":2,
         "created_at":"2024-01-15T00:53:21.509Z"
