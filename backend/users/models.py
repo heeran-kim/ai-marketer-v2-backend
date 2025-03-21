@@ -16,6 +16,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True) # Determines if the user can log in
     is_staff = models.BooleanField(default=False) # Needed for Django Admin panel access
     date_joined = models.DateTimeField(auto_now_add=True) # Stores when the user registered
+    requires_2fa = models.BooleanField(default=False) # Boolean for if the user is using 2FA
 
     objects = UserManager() # Assign custom UserManager for object creation
 

@@ -42,6 +42,10 @@ class TraditionalLoginSerializer(serializers.Serializer):
 
         # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
 
+        if (user.requires_2fa):
+            raise serializers.ValidationError({"error": "Requires 2FA."})
+
+
         return user # Return the authenticated user
 
 class SocialLoginSerializer(serializers.Serializer):
