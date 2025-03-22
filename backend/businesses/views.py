@@ -10,7 +10,6 @@ from social.serializers import SocialMediaSerializer
 from posts.models import Post
 from config.constants import DEFAULT_LOGO_URL
 
-
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -25,7 +24,7 @@ class DashboardView(APIView):
                 "postsSummary": None
             })
 
-        logo_url = getattr(business.logo, "url", DEFAULT_LOGO_URL)
+        logo_url = business.logo.url if business.logo else DEFAULT_LOGO_URL
 
         linked_platforms_queryset = SocialMedia.objects.filter(business=business)
         linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
@@ -69,7 +68,7 @@ class BusinessDetailView(APIView):
             # Return structured empty response
             return Response({
                 "name": None,
-                "logo": DEFAULT_LOGO_URL,
+                "logo": None,
                 "category": None,
                 "target_customers": None,
                 "vibe": None
@@ -107,6 +106,14 @@ class BusinessDetailView(APIView):
                 business.logo = logo_file
                 business.save(update_fields=['logo'])
                 return Response({"message": "Logo updated successfully"}, status=status.HTTP_200_OK)
+
+        if request.data.get('logo_removed') == 'true' and business:
+            if business.logo:
+                business.logo.delete(save=False)
+
+            business.logo = None
+            business.save(update_fields=['logo'])
+            return Response({"message": "Logo removed successfully"}, status=status.HTTP_200_OK)
 
         # Regular field update or creation
         if not business:
