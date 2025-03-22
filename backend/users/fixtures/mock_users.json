@@ -13,7 +13,8 @@
         "is_staff": true,
         "date_joined": "2025-02-28T00:53:21.509Z",
         "groups": [],
-        "user_permissions": []
+        "user_permissions": [],
+        "requires_2fa": true
     }
     },
     {
@@ -30,7 +31,8 @@
         "is_staff": false,
         "date_joined": "2025-02-28T00:53:22.097Z",
         "groups": [],
-        "user_permissions": []
+        "user_permissions": [],
+        "requires_2fa": false
     }
     }
 ]
