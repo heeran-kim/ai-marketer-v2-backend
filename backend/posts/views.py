@@ -9,6 +9,9 @@ from businesses.models import Business
 from social.models import SocialMedia
 from posts.models import Post
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PostListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
@@ -43,7 +46,7 @@ class PostListCreateView(ListCreateAPIView):
         serializer.save(business=business)
 
     def get(self, request, *args, **kwargs):
-        if request.query_params.get('form', False):
+        if request.query_params.get('create') == 'true':
             business = Business.objects.filter(owner=request.user).first()
 
             if not business:

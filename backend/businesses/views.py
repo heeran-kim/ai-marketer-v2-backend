@@ -8,6 +8,8 @@ from .serializers import BusinessSerializer
 from social.models import SocialMedia
 from social.serializers import SocialMediaSerializer
 from posts.models import Post
+from django.conf import settings
+
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -22,6 +24,12 @@ class DashboardView(APIView):
                 "linkedPlatforms": [],
                 "postsSummary": None
             })
+
+        logo_field = business.logo
+        if not logo_field:
+            logo_path = 'defaults/default_logo.png'
+        else:
+            logo_path = logo_field
 
         linked_platforms_queryset = SocialMedia.objects.filter(business=business)
         linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
@@ -40,7 +48,7 @@ class DashboardView(APIView):
         response_data = {
             "business": {
                 "name": business.name,
-                "logo": business.logo,
+                "logo": request.build_absolute_uri(settings.MEDIA_URL + str(logo_path)) if logo_path else None,
             },
             "linkedPlatforms": linked_platforms,
             "postsSummary": posts_summary,
@@ -71,7 +79,7 @@ class BusinessDetailView(APIView):
                 "vibe": None
             }, status=status.HTTP_200_OK)
 
-        serializer = BusinessSerializer(business)
+        serializer = BusinessSerializer(business, context={'request': request})
         return Response(serializer.data)
 
     def put(self, request):
@@ -114,12 +122,12 @@ class BusinessDetailView(APIView):
 
         # Regular field update or creation
         if not business:
-            serializer = BusinessSerializer(data=request.data)
+            serializer = BusinessSerializer(data=request.data, context={'request': request})
             if serializer.is_valid():
                 serializer.save(owner=request.user)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
-            serializer = BusinessSerializer(business, data=request.data, partial=partial)
+            serializer = BusinessSerializer(business, data=request.data, partial=partial, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
