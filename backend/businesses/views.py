@@ -8,7 +8,6 @@ from .serializers import BusinessSerializer
 from social.models import SocialMedia
 from social.serializers import SocialMediaSerializer
 from posts.models import Post
-from config.constants import DEFAULT_LOGO_URL
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -23,8 +22,6 @@ class DashboardView(APIView):
                 "linkedPlatforms": [],
                 "postsSummary": None
             })
-
-        logo_url = business.logo.url if business.logo else DEFAULT_LOGO_URL
 
         linked_platforms_queryset = SocialMedia.objects.filter(business=business)
         linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
@@ -43,7 +40,7 @@ class DashboardView(APIView):
         response_data = {
             "business": {
                 "name": business.name,
-                "logo": logo_url,
+                "logo": business.logo,
             },
             "linkedPlatforms": linked_platforms,
             "postsSummary": posts_summary,

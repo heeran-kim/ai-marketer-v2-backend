@@ -2,13 +2,16 @@
 from django.db import models
 from users.models import User
 
+def business_logo_path(instance, filename):
+    return f'business_logos/{instance.id}/logo.jpg'
+
 class Business(models.Model):
     """
     Business model representing a business entity owned by a user.
     Field lengths are standardized to 32 characters to match frontend constraints.
     """
     name = models.CharField(max_length=32)
-    logo = models.ImageField(upload_to='logos/', blank=True, null=True)
+    logo = models.ImageField(upload_to=business_logo_path, blank=True, null=True, default='defaults/default_logo.png')
     category = models.CharField(max_length=32, blank=True, null=True)  # Store the category of business
     target_customers = models.CharField(max_length=32, blank=True, null=True)  # Store target customer
     vibe = models.CharField(max_length=32, blank=True, null=True)  # Store vibe or theme of the business
