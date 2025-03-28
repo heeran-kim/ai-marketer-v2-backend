@@ -1,23 +1,49 @@
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
+from rest_framework.generics import ListCreateAPIView
+from django.utils import timezone
+from itertools import chain
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
-from posts.models import Post
+from posts.models import Post, Category
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
+import logging
 
-class PostListView(APIView):
+logger = logging.getLogger(__name__)
+
+class PostListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
-    def get(self,request):
-        business = Business.objects.filter(owner=request.user).first()
+    serializer_class = PostSerializer
 
+    def get_queryset(self):
+        business = Business.objects.filter(owner=self.request.user).first()
         if not business:
-            return Response({"error": "Business not found"}, status=404)
+            return Post.objects.none()
 
-        posts = Post.objects.filter(business=business).order_by("-created_at")
-        serialized_posts = PostSerializer(posts, many=True).data
+        failed_posts = list(Post.objects.filter(
+            business=business,
+            status='Failed'
+        ).order_by('-created_at'))
+
+        scheduled_posts = list(Post.objects.filter(
+            business=business,
+            status='Scheduled'
+        ).order_by('-scheduled_at'))
+
+        posted_posts = list(Post.objects.filter(
+            business=business,
+            status='Posted'
+        ).order_by('-posted_at'))
+
+        combined_posts = list(chain(failed_posts, scheduled_posts, posted_posts))
+        return combined_posts
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serialized_posts = self.get_serializer(queryset, many=True).data
 
         response_data = {
             "posts": serialized_posts,
@@ -25,48 +51,143 @@ class PostListView(APIView):
 
         return Response(response_data)
 
-class PostCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-    def get(self,request):
-        business = Business.objects.filter(owner=request.user).first()
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True) # TODO
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-        if not business:
-            return Response({"error": "Business not found"}, status=404)
+    def perform_create(self, serializer):
+        # TODO
+        business = Business.objects.filter(owner=self.request.user).first()
+        serializer.save(business=business)
 
-        post_categories = [
-            {"id": index + 1, "label": category["label"], "selected": False}
-            for index, category in enumerate(POST_CATEGORIES_OPTIONS)
-        ]
+    def get(self, request, *args, **kwargs):
+        if request.query_params.get('create') == 'true':
+            business = Business.objects.filter(owner=request.user).first()
 
-        linked_platforms_queryset = SocialMedia.objects.filter(business=business)
-        linked_platforms = [
-            {
-                "key": linked_platform.platform,
-                "label": next(
-                    (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
-                    linked_platform.platform
-                ),
+            if not business:
+                return Response({"error": "Business not found"}, status=404)
+
+            selectable_categories = [
+                {"id": index + 1, "label": category["label"], "is_selected": False}
+                for index, category in enumerate(POST_CATEGORIES_OPTIONS)
+            ]
+
+            linked_platforms_queryset = SocialMedia.objects.filter(business=business)
+            linked_platforms = [
+                {
+                    "key": linked_platform.platform,
+                    "label": next(
+                        (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
+                        linked_platform.platform
+                    ),
+                }
+                for linked_platform in linked_platforms_queryset
+            ]
+
+            response_data = {
+                "business": {
+                    "target_customers": business.target_customers,
+                    "vibe": business.vibe,
+                    "has_sales_data": False, # TODO
+                },
+                "selectable_categories": selectable_categories,
+                "linked_platforms": linked_platforms,
             }
-            for linked_platform in linked_platforms_queryset
-        ]
 
-        response_data = {
-            "business": {
-                "target_customers": business.target_customers,
-                "vibe": business.vibe,
-                "has_sales_data": False, # TODO
-            },
-            "post_categories": post_categories,
-            "linked_platforms": linked_platforms,
-        }
+            return Response(response_data)
 
-        return Response(response_data)
+        return self.list(request, *args, **kwargs)
 
-class PostDeleteView(APIView):
+class PostDetailView(APIView):
+    """
+    API view for retrieving, updating and deleting a specific post.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_post(self, pk, user):
+        """Helper method to get a post and verify ownership"""
+        business = Business.objects.filter(owner=user).first()
+        if not business:
+            return None, Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            post = Post.objects.get(pk=pk, business=business)
+            return post, None
+        except Post.DoesNotExist:
+            return None, Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, pk):
+        """Retrieve a specific post"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
+        serializer = PostSerializer(post)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update a post partially"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
+        # Handle caption updates
+        if 'caption' in request.data:
+            post.caption = request.data['caption']
+
+        # Handle categories updates
+        if 'categories' in request.data:
+            # First clear existing categories
+            post.categories.clear()
+            # Then add new categories
+            category_labels = request.data.getlist('categories')
+            for label in category_labels:
+                try:
+                    category = Category.objects.get(label=label)
+                except Category.DoesNotExist:
+                    return Response({"error": f"Category '{label}' does not exist."}, status=400)
+                post.categories.add(category)
+
+        # Handle image updates if provided
+        if 'image' in request.FILES:
+            post.image = request.FILES['image']
+
+        # Handle scheduled_at updates
+        if 'scheduled_at' in request.data:
+            scheduled_at = request.data.get("scheduled_at")
+
+            if scheduled_at:
+                post.scheduled_at = scheduled_at
+                post.status = 'Scheduled'
+            else:
+                post.scheduled_at = None
+                try:
+                    # TODO success = publish_to_social_media(post)
+                    success = True
+                    post.link = "https://test.com/p/test"
+
+                    if success:
+                        post.status = 'Posted'
+                        post.posted_at = timezone.now()
+                    else:
+                        post.status = 'Failed'
+                except Exception as e:
+                    logger.error(f"Error publishing post: {e}")
+                    post.status = 'Failed'
+
+        post.save()
+
+        serializer = PostSerializer(post)
+        return Response(serializer.data)
+
     def delete(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        """Delete a post"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
         post.delete()
-
-        response_data = {"message": "Post deleted successfully."}
-
-        return Response(response_data, status=200)
+        return Response({"message": "Post deleted successfully"}, status=status.HTTP_200_OK)

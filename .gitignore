@@ -13,6 +13,9 @@ media/
 staticfiles/
 test/
 
+# IntelliJ-related ignores
+.idea/
+
 # Ignore .pem
 *.pem
 
