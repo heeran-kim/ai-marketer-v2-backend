@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
+from django.utils import timezone
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
@@ -139,10 +140,25 @@ class PostDetailView(APIView):
         # Handle scheduled_at updates
         if 'scheduled_at' in request.data:
             scheduled_at = request.data.get("scheduled_at")
+
             if scheduled_at:
                 post.scheduled_at = scheduled_at
+                post.status = 'Scheduled'
             else:
-                post.scheduled_at = None  # Clear the field
+                post.scheduled_at = None
+                try:
+                    # TODO success = publish_to_social_media(post)
+                    success = True
+                    post.link = "https://test.com/p/test"
+
+                    if success:
+                        post.status = 'Posted'
+                        post.posted_at = timezone.now()
+                    else:
+                        post.status = 'Failed'
+                except Exception as e:
+                    logger.error(f"Error publishing post: {e}")
+                    post.status = 'Failed'
 
         post.save()
 
