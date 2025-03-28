@@ -3,11 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
-from django.shortcuts import get_object_or_404
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
-from posts.models import Post
+from posts.models import Post, Category
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
 import logging
 
@@ -52,8 +51,8 @@ class PostListCreateView(ListCreateAPIView):
             if not business:
                 return Response({"error": "Business not found"}, status=404)
 
-            post_categories = [
-                {"id": index + 1, "label": category["label"], "selected": False}
+            selectable_categories = [
+                {"id": index + 1, "label": category["label"], "is_selected": False}
                 for index, category in enumerate(POST_CATEGORIES_OPTIONS)
             ]
 
@@ -75,7 +74,7 @@ class PostListCreateView(ListCreateAPIView):
                     "vibe": business.vibe,
                     "has_sales_data": False, # TODO
                 },
-                "post_categories": post_categories,
+                "selectable_categories": selectable_categories,
                 "linked_platforms": linked_platforms,
             }
 
@@ -83,11 +82,78 @@ class PostListCreateView(ListCreateAPIView):
 
         return self.list(request, *args, **kwargs)
 
-class PostDeleteView(APIView):
+class PostDetailView(APIView):
+    """
+    API view for retrieving, updating and deleting a specific post.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_post(self, pk, user):
+        """Helper method to get a post and verify ownership"""
+        business = Business.objects.filter(owner=user).first()
+        if not business:
+            return None, Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            post = Post.objects.get(pk=pk, business=business)
+            return post, None
+        except Post.DoesNotExist:
+            return None, Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, pk):
+        """Retrieve a specific post"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
+        serializer = PostSerializer(post)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update a post partially"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
+        # Handle caption updates
+        if 'caption' in request.data:
+            post.caption = request.data['caption']
+
+        # Handle categories updates
+        if 'categories' in request.data:
+            # First clear existing categories
+            post.categories.clear()
+            # Then add new categories
+            category_labels = request.data.getlist('categories')
+            for label in category_labels:
+                try:
+                    category = Category.objects.get(label=label)
+                except Category.DoesNotExist:
+                    return Response({"error": f"Category '{label}' does not exist."}, status=400)
+                post.categories.add(category)
+
+        # Handle image updates if provided
+        if 'image' in request.FILES:
+            post.image = request.FILES['image']
+
+        # Handle scheduled_at updates
+        if 'scheduled_at' in request.data:
+            scheduled_at = request.data.get("scheduled_at")
+            if scheduled_at:
+                post.scheduled_at = scheduled_at
+            else:
+                post.scheduled_at = None  # Clear the field
+
+        post.save()
+
+        serializer = PostSerializer(post)
+        return Response(serializer.data)
+
     def delete(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        """Delete a post"""
+        post, error_response = self.get_post(pk, request.user)
+        if error_response:
+            return error_response
+
         post.delete()
-
-        response_data = {"message": "Post deleted successfully."}
-
-        return Response(response_data, status=200)
+        return Response({"message": "Post deleted successfully"}, status=status.HTTP_200_OK)
