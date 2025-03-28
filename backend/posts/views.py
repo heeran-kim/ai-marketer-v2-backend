@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
 from django.utils import timezone
+from itertools import chain
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
@@ -21,7 +22,24 @@ class PostListCreateView(ListCreateAPIView):
         business = Business.objects.filter(owner=self.request.user).first()
         if not business:
             return Post.objects.none()
-        return Post.objects.filter(business=business).order_by("-created_at")
+
+        failed_posts = list(Post.objects.filter(
+            business=business,
+            status='Failed'
+        ).order_by('-created_at'))
+
+        scheduled_posts = list(Post.objects.filter(
+            business=business,
+            status='Scheduled'
+        ).order_by('-scheduled_at'))
+
+        posted_posts = list(Post.objects.filter(
+            business=business,
+            status='Posted'
+        ).order_by('-posted_at'))
+
+        combined_posts = list(chain(failed_posts, scheduled_posts, posted_posts))
+        return combined_posts
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
