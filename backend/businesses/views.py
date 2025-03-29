@@ -31,16 +31,31 @@ class DashboardView(APIView):
         else:
             logo_path = logo_field
 
-        linked_platforms_queryset = SocialMedia.objects.filter(business=business)
-        linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
+        linked_platforms = []
+        platforms = SocialMedia.objects.filter(business=business)
+
+        for platform in platforms:
+            published_count = Post.objects.filter(
+                business=business,
+                platform=platform,
+                status="Published"
+            ).count()
+
+            linked_platforms.append({
+                "key": platform.platform,
+                "label": platform.get_platform_display(),
+                "link": platform.link,
+                "username": platform.username,
+                "num_published": published_count,
+            })
 
         posts = Post.objects.filter(business=business)
         last_post = posts.order_by("-created_at").first()
 
         posts_summary = {
-            "num_scheduled_posts": posts.filter(status="Scheduled").count(),
-            "num_published_posts": posts.filter(status="Published").count(),
-            "num_failed_posts": posts.filter(status="Failed").count(),
+            "num_scheduled": posts.filter(status="Scheduled").count(),
+            "num_published": posts.filter(status="Published").count(),
+            "num_failed": posts.filter(status="Failed").count(),
             "last_activity": last_post.created_at.strftime("%Y-%m-%d %H:%M:%S") if last_post else None,
             "last_post_link": getattr(last_post, "link", None) if last_post else None,
         }
