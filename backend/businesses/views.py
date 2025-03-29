@@ -9,6 +9,9 @@ from social.models import SocialMedia
 from social.serializers import SocialMediaSerializer
 from posts.models import Post
 from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardView(APIView):
@@ -50,15 +53,23 @@ class DashboardView(APIView):
             })
 
         posts = Post.objects.filter(business=business)
-        last_post = posts.order_by("-created_at").first()
 
         posts_summary = {
             "num_scheduled": posts.filter(status="Scheduled").count(),
             "num_published": posts.filter(status="Published").count(),
             "num_failed": posts.filter(status="Failed").count(),
-            "last_activity": last_post.created_at.strftime("%Y-%m-%d %H:%M:%S") if last_post else None,
-            "last_post_link": getattr(last_post, "link", None) if last_post else None,
         }
+
+        from collections import defaultdict
+        published_posts = posts.filter(status="Published").order_by("-posted_at")
+        
+        post_dates = defaultdict(list)
+        for post in published_posts:
+            date_str = post.posted_at.strftime("%Y-%m-%d")
+            post_dates[date_str].append(post.platform.platform)
+        
+        last_post_date = published_posts.first().posted_at.isoformat() if published_posts.exists() else None
+
 
         response_data = {
             "business": {
@@ -67,6 +78,10 @@ class DashboardView(APIView):
             },
             "linked_platforms": linked_platforms,
             "posts_summary": posts_summary,
+            "post_activity": {
+                "post_dates": post_dates,
+                "last_post_date": last_post_date,
+            }
         }
 
         return Response(response_data)
