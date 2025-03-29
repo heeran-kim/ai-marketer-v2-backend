@@ -35,7 +35,7 @@ class PostListCreateView(ListCreateAPIView):
 
         posted_posts = list(Post.objects.filter(
             business=business,
-            status='Posted'
+            status='Published'
         ).order_by('-posted_at'))
 
         combined_posts = list(chain(failed_posts, scheduled_posts, posted_posts))
@@ -170,7 +170,7 @@ class PostDetailView(APIView):
                     post.link = "https://test.com/p/test"
 
                     if success:
-                        post.status = 'Posted'
+                        post.status = 'Published'
                         post.posted_at = timezone.now()
                     else:
                         post.status = 'Failed'

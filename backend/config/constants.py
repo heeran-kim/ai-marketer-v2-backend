@@ -26,7 +26,7 @@ POST_CATEGORIES_OPTIONS = [
 
 POST_STATUS_OPTIONS = [
     ('scheduled', 'Scheduled'),
-    ('posted', 'Posted'),
+    ('published', 'Published'),
     ('failed', 'Failed'),
 ]
 

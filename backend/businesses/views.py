@@ -9,6 +9,9 @@ from social.models import SocialMedia
 from social.serializers import SocialMediaSerializer
 from posts.models import Post
 from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardView(APIView):
@@ -21,8 +24,8 @@ class DashboardView(APIView):
             # Return consistent structure with null/empty values
             return Response({
                 "business": None,
-                "linkedPlatforms": [],
-                "postsSummary": None
+                "linked_platforms": [],
+                "posts_summary": None
             })
 
         logo_field = business.logo
@@ -31,27 +34,52 @@ class DashboardView(APIView):
         else:
             logo_path = logo_field
 
-        linked_platforms_queryset = SocialMedia.objects.filter(business=business)
-        linked_platforms = SocialMediaSerializer(linked_platforms_queryset, many=True).data
+        linked_platforms = []
+        platforms = SocialMedia.objects.filter(business=business)
+
+        for platform in platforms:
+            published_count = Post.objects.filter(
+                business=business,
+                platform=platform,
+                status="Published"
+            ).count()
+
+            linked_platforms.append({
+                "key": platform.platform,
+                "label": platform.get_platform_display(),
+                "link": platform.link,
+                "username": platform.username,
+                "num_published": published_count,
+            })
 
         posts = Post.objects.filter(business=business)
-        last_post = posts.order_by("-created_at").first()
 
         posts_summary = {
-            "upcomingPosts": posts.filter(status="upcoming").count(),
-            "uploadedPosts": posts.filter(status="uploaded").count(),
-            "failedPosts": posts.filter(status="failed").count(),
-            "lastActivity": last_post.created_at.strftime("%Y-%m-%d %H:%M:%S") if last_post else None,
-            "lastPostLink": getattr(last_post, "link", None) if last_post else None,
+            "num_scheduled": posts.filter(status="Scheduled").count(),
+            "num_published": posts.filter(status="Published").count(),
+            "num_failed": posts.filter(status="Failed").count(),
         }
 
+        from collections import defaultdict
+        published_posts = posts.filter(status="Published").order_by("-posted_at")
+        
+        post_dates = defaultdict(list)
+        for post in published_posts:
+            date_str = post.posted_at.strftime("%Y-%m-%d")
+            post_dates[date_str].append(post.platform.platform)
+        
+        last_post_date = published_posts.first().posted_at.isoformat() if published_posts.exists() else None
+
+        business_serializer = BusinessSerializer(business, context={'request': request})
+
         response_data = {
-            "business": {
-                "name": business.name,
-                "logo": request.build_absolute_uri(settings.MEDIA_URL + str(logo_path)) if logo_path else None,
-            },
-            "linkedPlatforms": linked_platforms,
-            "postsSummary": posts_summary,
+            "business": business_serializer.data,
+            "linked_platforms": linked_platforms,
+            "posts_summary": posts_summary,
+            "post_activity": {
+                "post_dates": post_dates,
+                "last_post_date": last_post_date,
+            }
         }
 
         return Response(response_data)

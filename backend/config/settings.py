@@ -207,11 +207,11 @@ DATABASES = {
 
 # LANGUAGE_CODE = "en-us"
 #
-# TIME_ZONE = "UTC"
+TIME_ZONE = 'UTC'
 #
 # USE_I18N = True
 #
-# USE_TZ = True
+USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
@@ -240,24 +240,24 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "ERROR",
+            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
     },
     "root": {
-        "level": "ERROR",
+        "level": "INFO",
         "handlers": ["console"],
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": "INFO",
             "propagate": False,
         },
         "users": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": "INFO",
             "propagate": False,
         },
     },
