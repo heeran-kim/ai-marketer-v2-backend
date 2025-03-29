@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'posts',
     'promotions',
     'ai',
+    'sales',
     "django_extensions",
 ]
 
@@ -228,8 +229,6 @@ AUTH_USER_MODEL = 'users.User'
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
-
-# Logging Settings
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -241,24 +240,24 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",
+            "level": "ERROR",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
     },
     "root": {
-        "level": "DEBUG",
+        "level": "ERROR",
         "handlers": ["console"],
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "ERROR",
             "propagate": False,
         },
         "users": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "ERROR",
             "propagate": False,
         },
     },
