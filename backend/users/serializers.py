@@ -2,6 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
 
+import pyotp
+import qrcode
+
 User = get_user_model() # AUTH_USER_MODEL = 'users.User'
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -98,7 +101,7 @@ class TwoFactorVerificationSerializer(serializers.Serializer):
     """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=6)
-    otp = serializers.CharField()
+    code = serializers.CharField()
 
     def validate(self, data):
         """
@@ -108,7 +111,28 @@ class TwoFactorVerificationSerializer(serializers.Serializer):
         - If authentication is successful, check if the OTP is valid.
         - If both checks pass, return the authenticated user.
         """
-        pass
+        user = authenticate(email=data['email'], password=data['password'])
+        if not user:
+            raise serializers.ValidationError({"error": "Incorrect email or password."})
+
+        # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
+
+        if (user.requires_2fa==False):
+            raise serializers.ValidationError({"error": "User doesn't require 2FA!"})
+
+        #raise serializers.ValidationError({"error": data.keys()})
+
+        if not (user.secret_2fa):
+            raise serializers.ValidationError({"error": "User doesn't require 2FA!"})
+        
+        otp_code = data['code']
+        totp = pyotp.TOTP(user.secret_2fa)
+
+        if totp.verify(otp_code):
+            return user # Return the authenticated user
+        else:
+            raise serializers.ValidationError({"error": "Wrong Authentication Code!"})
+        
 
 class ForgotPasswordSerializer(serializers.Serializer):
     """
@@ -154,3 +178,17 @@ class ResetPasswordSerializer(serializers.Serializer):
         """Updates the user's password."""
         # TODO: Reset user password
         pass
+
+
+class TWOFASerializer(serializers.Serializer):
+    """
+    Serializer for Quickly returnong authenticated user for 2FA View Functions
+    """
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=6)
+
+    def validate(self, data):
+        user = authenticate(email=data['email'], password=data['password'])
+        if not user:
+            raise serializers.ValidationError({"error": "Incorrect email or password."})
+        return user

@@ -5,12 +5,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
+from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, TWOFASerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
+
+from django.http import JsonResponse
+import pyotp
+import qrcode
+import base64
+from io import BytesIO
 
 # Get the custom User model
 User = get_user_model()
@@ -60,6 +66,8 @@ class LoginView(APIView):
     def post(self, request):
         """Handles user login requests dynamically and generates tokens"""
         serializer_class = self.get_serializer_class()
+        #TODO: Remove bottom line (its for debugging)
+        #logger.info(f"{serializer_class} {request.data.get('method')}")
         if not serializer_class:
             return Response(
                 {"error": f"Unsupported login method: {request.data.method}"},
@@ -173,4 +181,54 @@ class ResetPasswordView(GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"message": "Password has been reset"}, status=status.HTTP_200_OK)
+
+
+class Check2FA(GenericAPIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    serializer_class = TWOFASerializer
+
+    def post(self, request):
+        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data # Get authenticated user
+        return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+    
+class Remove2FA(GenericAPIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    serializer_class = TWOFASerializer
+
+    def post(self, request):
+        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data # Get authenticated user
+        user.secret_2fa = ""
+        user.requires_2fa = False
+        user.save()
+        return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+    
+class Enable2FA(GenericAPIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    serializer_class = TWOFASerializer
+
+    def post(self, request):
+        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data # Get authenticated user
+
+        #generate secret
+        secret = pyotp.random_base32()
+        user.secret_2fa = secret
+        user.requires_2fa = True
+        user.save()
+        #generate qr code
+        otp_uri = pyotp.totp.TOTP(secret).provisioning_uri(user.email, issuer_name="AI-Marketer")
+        qr = qrcode.make(otp_uri)
+        buffer = BytesIO()
+        qr.save(buffer, format="PNG")
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()  #convert image to Base64
+
+        return JsonResponse({"qr_code": f"data:image/png;base64,{qr_base64}"})
 
