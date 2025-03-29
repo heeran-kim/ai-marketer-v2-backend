@@ -70,12 +70,10 @@ class DashboardView(APIView):
         
         last_post_date = published_posts.first().posted_at.isoformat() if published_posts.exists() else None
 
+        business_serializer = BusinessSerializer(business, context={'request': request})
 
         response_data = {
-            "business": {
-                "name": business.name,
-                "logo": request.build_absolute_uri(settings.MEDIA_URL + str(logo_path)) if logo_path else None,
-            },
+            "business": business_serializer.data,
             "linked_platforms": linked_platforms,
             "posts_summary": posts_summary,
             "post_activity": {
