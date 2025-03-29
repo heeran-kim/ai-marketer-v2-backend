@@ -21,8 +21,8 @@ class DashboardView(APIView):
             # Return consistent structure with null/empty values
             return Response({
                 "business": None,
-                "linkedPlatforms": [],
-                "postsSummary": None
+                "linked_platforms": [],
+                "posts_summary": None
             })
 
         logo_field = business.logo
@@ -38,11 +38,11 @@ class DashboardView(APIView):
         last_post = posts.order_by("-created_at").first()
 
         posts_summary = {
-            "upcomingPosts": posts.filter(status="upcoming").count(),
-            "uploadedPosts": posts.filter(status="uploaded").count(),
-            "failedPosts": posts.filter(status="failed").count(),
-            "lastActivity": last_post.created_at.strftime("%Y-%m-%d %H:%M:%S") if last_post else None,
-            "lastPostLink": getattr(last_post, "link", None) if last_post else None,
+            "num_scheduled_posts": posts.filter(status="Scheduled").count(),
+            "num_published_posts": posts.filter(status="Published").count(),
+            "num_failed_posts": posts.filter(status="Failed").count(),
+            "last_activity": last_post.created_at.strftime("%Y-%m-%d %H:%M:%S") if last_post else None,
+            "last_post_link": getattr(last_post, "link", None) if last_post else None,
         }
 
         response_data = {
@@ -50,8 +50,8 @@ class DashboardView(APIView):
                 "name": business.name,
                 "logo": request.build_absolute_uri(settings.MEDIA_URL + str(logo_path)) if logo_path else None,
             },
-            "linkedPlatforms": linked_platforms,
-            "postsSummary": posts_summary,
+            "linked_platforms": linked_platforms,
+            "posts_summary": posts_summary,
         }
 
         return Response(response_data)
