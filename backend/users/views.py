@@ -12,6 +12,8 @@ import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
 
+from cryptography.fernet import Fernet #cryptography package
+
 from django.http import JsonResponse
 import pyotp
 import qrcode
@@ -218,9 +220,14 @@ class Enable2FA(GenericAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data # Get authenticated user
 
-        #generate secret
         secret = pyotp.random_base32()
-        user.secret_2fa = secret
+        secret_bytes = str.encode(secret) #convert to bytes
+        f = Fernet(b'VX_qVgbJwbJIzRZWvxjb_piYeJU24GYC-jx6pDQ6jNY=') #assign encryption key
+        # the plaintext is converted to ciphertext 
+        secret_encrypted = f.encrypt(secret_bytes) 
+        
+
+        user.secret_2fa = secret_encrypted
         user.requires_2fa = True
         user.save()
         #generate qr code
