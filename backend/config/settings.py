@@ -32,6 +32,10 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable is not set.")
 
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+if not TWOFA_ENCRYPTION_KEY:
+    raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [

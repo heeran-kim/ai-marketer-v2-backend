@@ -18,10 +18,14 @@ from django.http import JsonResponse
 import pyotp
 import qrcode
 import base64
+import os
 from io import BytesIO
+
 
 # Get the custom User model
 User = get_user_model()
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 
 # Setup logger for debugging and tracking requests
 logger = logging.getLogger(__name__)
@@ -222,7 +226,7 @@ class Enable2FA(GenericAPIView):
 
         secret = pyotp.random_base32()
         secret_bytes = str.encode(secret) #convert to bytes
-        f = Fernet(b'VX_qVgbJwbJIzRZWvxjb_piYeJU24GYC-jx6pDQ6jNY=') #assign encryption key
+        f = Fernet(TWOFA_ENCRYPTION_KEY) #assign encryption key
         # the plaintext is converted to ciphertext 
         secret_encrypted = f.encrypt(secret_bytes) 
         

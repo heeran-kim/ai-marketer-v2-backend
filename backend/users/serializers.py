@@ -4,10 +4,15 @@ from django.contrib.auth import authenticate
 
 import pyotp
 import qrcode
+import os
 
 from cryptography.fernet import Fernet #cryptography package
 
 User = get_user_model() # AUTH_USER_MODEL = 'users.User'
+
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
@@ -48,7 +53,7 @@ class TraditionalLoginSerializer(serializers.Serializer):
         # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
 
         if (user.requires_2fa):
-            raise serializers.ValidationError({"error": "Requires 2FA."})
+            raise serializers.ValidationError({"error": "Requires 2FA. Redirecting you now!"})
 
 
         return user # Return the authenticated user
@@ -127,7 +132,7 @@ class TwoFactorVerificationSerializer(serializers.Serializer):
         if not (user.secret_2fa):
             raise serializers.ValidationError({"error": "User doesn't require 2FA!"})
         
-        f = Fernet(b'VX_qVgbJwbJIzRZWvxjb_piYeJU24GYC-jx6pDQ6jNY=') 
+        f = Fernet(TWOFA_ENCRYPTION_KEY) 
         otp_code = data['code']
         secret=user.secret_2fa[1:]  #do 1: to not include byte identifier
         secret_decrypted=f.decrypt(secret)
