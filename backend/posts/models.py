@@ -1,6 +1,8 @@
+# posts/models.py
 from django.db import models
 from businesses.models import Business
 from social.models import SocialMedia
+from promotions.models import Promotion
 from config.constants import POST_CATEGORIES_OPTIONS, POST_STATUS_OPTIONS
 
 def post_image_path(instance, filename):
@@ -32,6 +34,16 @@ class Post(models.Model):
     comments = models.IntegerField(default=0) # Store number of comments
     reposts = models.IntegerField(default=0)
     shares = models.IntegerField(default=0)
+    
+    # Direct FK relationship to track which promotional campaign this post belongs to
+    # Optional to allow posts that aren't part of any promotion
+    promotion = models.ForeignKey(
+        Promotion,
+        on_delete=models.CASCADE,
+        related_name="posts",
+        null=True,
+        blank=True
+    )
     
     def __str__(self):
         return f"Post: {self.categories} - {self.caption}"

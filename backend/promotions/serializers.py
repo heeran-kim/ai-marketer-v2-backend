@@ -1,11 +1,13 @@
+# promotions/serializers.py
 from rest_framework import serializers
 from .models import Promotion
 from posts.serializers import PostSerializer
-from config.constants import PROMOTION_CATEGORIES_OPTIONS
+from django.utils import timezone
 
 class PromotionSerializer(serializers.ModelSerializer):
-    posts = PostSerializer(many=True, read_only=True)
+    posts = serializers.SerializerMethodField()
     categories = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = Promotion
@@ -21,5 +23,18 @@ class PromotionSerializer(serializers.ModelSerializer):
         ]
 
     def get_categories(self, obj):
-        category_labels = {c["key"]: c["label"] for c in PROMOTION_CATEGORIES_OPTIONS}
-        return [category_labels.get(category.key, category.key) for category in obj.categories.all()]
+        return [{"key": category.key, "label": category.label} for category in obj.categories.all()]
+    
+    # Calculate status dynamically based on current time vs. promotion dates
+    def get_status(self, obj):
+        now = timezone.now()
+        if now < obj.start_date:
+            return "upcoming"
+        elif obj.start_date <= now <= obj.end_date:
+            return "ongoing"
+        else:
+            return "ended"
+        
+    def get_posts(self, obj):
+        posts = obj.posts.all()
+        return PostSerializer(posts, many=True, context=self.context).data
