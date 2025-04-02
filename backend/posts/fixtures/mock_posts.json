@@ -16,7 +16,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": null
     }
   },
   {
@@ -36,7 +37,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": null
     }
   },
   {
@@ -56,7 +58,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": null
     }
   },
   {
@@ -76,7 +79,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": 1
     }
   },
   {
@@ -96,7 +100,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": 1
     }
   },
   {
@@ -116,7 +121,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": 2
     }
   },
   {
@@ -136,7 +142,8 @@
       "reactions": 10,
       "comments": 4,
       "reposts": 3,
-      "shares": 4
+      "shares": 4,
+      "promotion": 2
     }
   },
   {
@@ -156,7 +163,8 @@
       "reactions": 0,
       "comments": 0,
       "reposts": 0,
-      "shares": 0
+      "shares": 0,
+      "promotion": 2
     }
   },
   {
@@ -176,7 +184,8 @@
       "reactions": 0,
       "comments": 0,
       "reposts": 0,
-      "shares": 0
+      "shares": 0,
+      "promotion": null
     }
   },
   {
@@ -196,7 +205,8 @@
       "reactions": 0,
       "comments": 0,
       "reposts": 0,
-      "shares": 0
+      "shares": 0,
+      "promotion": null
     }
   }
 ]
