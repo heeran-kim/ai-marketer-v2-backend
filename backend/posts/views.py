@@ -1,3 +1,4 @@
+import json
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
@@ -5,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
 from django.utils import timezone
 from itertools import chain
+from promotions.models import Promotion
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
@@ -100,6 +102,61 @@ class PostListCreateView(ListCreateAPIView):
             return Response(response_data)
 
         return self.list(request, *args, **kwargs)
+    
+    def post(self, request):
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Handle file upload
+        if 'image' not in request.FILES:
+            return Response({"error": "No Image provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = request.POST
+
+        try:
+            platform = SocialMedia.objects.get(platform=data["platform"])
+        except SocialMedia.DoesNotExist:
+            return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        promotion = None
+        if "promotion" in data and data["promotion"]:
+            try:
+                promotion = Promotion.objects.get(id=data["promotion"])
+            except Promotion.DoesNotExist:
+                return Response({"error": "Invalid promotion ID"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        scheduled_at = data.get("scheduled_at")
+        if scheduled_at:
+            posted_at = None
+            link = None
+            post_status = "Scheduled"
+        else :
+            # TODO
+            scheduled_at = None
+            posted_at = timezone.now()
+            link = "test.com"
+            post_status = "Published"
+
+        
+        post = Post.objects.create(
+            business=business,
+            platform=platform,
+            caption=data.get("caption", ""),
+            image=request.FILES.get('image'),
+            link=link,
+            posted_at=posted_at,
+            scheduled_at=scheduled_at,
+            status=post_status,
+            promotion=promotion
+        )
+        
+        categories_data = json.loads(data.get("categories", "[]"))
+        categories = Category.objects.filter(id__in=categories_data)
+        post.categories.set(categories)
+
+        return Response({"message": "Post created successfully!"}, status=status.HTTP_201_CREATED)
+
 
 class PostDetailView(APIView):
     """
