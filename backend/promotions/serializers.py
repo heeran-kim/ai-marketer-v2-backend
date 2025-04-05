@@ -1,6 +1,6 @@
 # promotions/serializers.py
 from rest_framework import serializers
-from .models import Promotion
+from .models import Promotion, PromotionSuggestion
 from posts.serializers import PostSerializer
 from django.utils import timezone
 
@@ -38,3 +38,25 @@ class PromotionSerializer(serializers.ModelSerializer):
     def get_posts(self, obj):
         posts = obj.posts.all()
         return PostSerializer(posts, many=True, context=self.context).data
+
+    def validate(self, data):
+        # Ensure end data is after start date
+        if data.get('end_date') and data.get('start_date'):
+            if data['end_date'] < data['start_date']:
+                raise serializers.ValidationError("End date must be after start date")
+        return data 
+    
+class SuggestionSerializer(serializers.ModelSerializer):
+    categories = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PromotionSuggestion
+        fields = [
+            "id",
+            "title",
+            "categories",
+            "description",
+        ]
+
+    def get_categories(self, obj):
+        return [{"key": category.key, "label": category.label} for category in obj.categories.all()]
