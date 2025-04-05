@@ -71,4 +71,4 @@ class PromotionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(business=business)
-        return Response(serializer.data, status=status.HTTP_202_CREATED)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
