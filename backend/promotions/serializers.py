@@ -1,19 +1,26 @@
 # promotions/serializers.py
 from rest_framework import serializers
-from .models import Promotion, PromotionSuggestion
+from .models import Promotion, PromotionSuggestion, PromotionCategories
 from posts.serializers import PostSerializer
 from django.utils import timezone
 
 class PromotionSerializer(serializers.ModelSerializer):
     posts = serializers.SerializerMethodField()
-    categories = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    category_ids = serializers.PrimaryKeyRelatedField(
+        queryset=PromotionCategories.objects.all(),
+        many=True,
+        write_only=True,
+        source="categories"
+    )
+    categories = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Promotion
         fields = [
             "id",
             "posts",
+            "category_ids",
             "categories",
             "description",
             "start_date",
