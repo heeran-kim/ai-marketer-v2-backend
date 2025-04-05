@@ -63,10 +63,10 @@ class DashboardView(APIView):
         from collections import defaultdict
         published_posts = posts.filter(status="Published").order_by("-posted_at")
         
-        post_dates = defaultdict(list)
+        platforms_by_datetime = defaultdict(list)
         for post in published_posts:
-            date_str = post.posted_at.strftime("%Y-%m-%d")
-            post_dates[date_str].append(post.platform.platform)
+            date_str = post.posted_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+            platforms_by_datetime[date_str].append(post.platform.platform)
         
         last_post_date = published_posts.first().posted_at.isoformat() if published_posts.exists() else None
 
@@ -77,7 +77,7 @@ class DashboardView(APIView):
             "linked_platforms": linked_platforms,
             "posts_summary": posts_summary,
             "post_activity": {
-                "post_dates": post_dates,
+                "platforms_by_datetime": platforms_by_datetime,
                 "last_post_date": last_post_date,
             }
         }
