@@ -14,8 +14,8 @@ class PromotionSerializer(serializers.ModelSerializer):
         source="categories"
     )
     categories = serializers.SerializerMethodField(read_only=True)
-    start_date = serializers.DateField(required=False, allow_null=True)
-    end_date = serializers.DateField(required=False, allow_null=True)
+    start_date = serializers.DateTimeField(required=False, allow_null=True)
+    end_date = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = Promotion
