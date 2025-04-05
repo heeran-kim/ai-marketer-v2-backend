@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, TWOFASerializer
+from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 import logging
@@ -189,40 +189,54 @@ class ResetPasswordView(GenericAPIView):
         return Response({"message": "Password has been reset"}, status=status.HTTP_200_OK)
 
 
-class Check2FA(GenericAPIView):
-    permission_classes = [AllowAny]
-    parser_classes = [JSONParser]
-    serializer_class = TWOFASerializer
+class Check2FA(APIView):
+    # permission_classes = [AllowAny]
+    # parser_classes = [JSONParser]
+    # serializer_class = TWOFASerializer
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data # Get authenticated user
+        code=request.data.get('code')
+
+        user=request.user
+        #if code is given then user is trying to add 2fa
+        if(code!=''):
+            #try check if the code is valid      
+            f = Fernet(TWOFA_ENCRYPTION_KEY) 
+            otp_code = code
+            secret=user.secret_2fa[1:]  #do 1: to not include byte identifier
+            secret_decrypted=f.decrypt(secret)
+            secret_decoded=secret_decrypted.decode()
+            totp = pyotp.TOTP(secret_decoded)
+
+            if not totp.verify(otp_code):
+                return Response({'status': False}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.requires_2fa = True
+            user.save()
+            return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+        #else user is just checking if it is enabled
+
         return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
     
-class Remove2FA(GenericAPIView):
-    permission_classes = [AllowAny]
-    parser_classes = [JSONParser]
-    serializer_class = TWOFASerializer
+class Remove2FA(APIView):
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data # Get authenticated user
+        user=request.user
         user.secret_2fa = ""
         user.requires_2fa = False
         user.save()
         return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
     
-class Enable2FA(GenericAPIView):
-    permission_classes = [AllowAny]
-    parser_classes = [JSONParser]
-    serializer_class = TWOFASerializer
+class Enable2FA(APIView):
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = TWOFASerializer(data=request.data.get("credentials", {}))
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data # Get authenticated user
+
+        user=request.user
 
         secret = pyotp.random_base32()
         secret_bytes = str.encode(secret) #convert to bytes
@@ -232,7 +246,6 @@ class Enable2FA(GenericAPIView):
         
 
         user.secret_2fa = secret_encrypted
-        user.requires_2fa = True
         user.save()
         #generate qr code
         otp_uri = pyotp.totp.TOTP(secret).provisioning_uri(user.email, issuer_name="AI-Marketer")

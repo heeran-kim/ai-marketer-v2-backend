@@ -189,17 +189,3 @@ class ResetPasswordSerializer(serializers.Serializer):
         """Updates the user's password."""
         # TODO: Reset user password
         pass
-
-
-class TWOFASerializer(serializers.Serializer):
-    """
-    Serializer for Quickly returnong authenticated user for 2FA View Functions
-    """
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, min_length=6)
-
-    def validate(self, data):
-        user = authenticate(email=data['email'], password=data['password'])
-        if not user:
-            raise serializers.ValidationError({"error": "Incorrect email or password."})
-        return user
