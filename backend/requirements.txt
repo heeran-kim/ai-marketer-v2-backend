@@ -71,3 +71,4 @@ gunicorn
 drf-spectacular
 pyotp
 qrcode
+Fernet
