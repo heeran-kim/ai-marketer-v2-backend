@@ -14,8 +14,7 @@ class PromotionSerializer(serializers.ModelSerializer):
         source="categories"
     )
     categories = serializers.SerializerMethodField(read_only=True)
-    start_date = serializers.DateTimeField(required=False, allow_null=True)
-    end_date = serializers.DateTimeField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
 
     class Meta:
         model = Promotion
@@ -43,7 +42,7 @@ class PromotionSerializer(serializers.ModelSerializer):
     
     # Calculate status dynamically based on current time vs. promotion dates
     def get_status(self, obj):
-        now = timezone.now()
+        now = timezone.now().date()
         if not obj.start_date and not obj.end_date:
             return "ongoing"
         
@@ -59,21 +58,6 @@ class PromotionSerializer(serializers.ModelSerializer):
                 return "ended"
         
         return "unknown"
-
-    def validate(self, data):
-        # Ensure end date is after start date if both are provided
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
-
-        # If both dates are provided, check if end date is after start date
-        if end_date and start_date:
-            if end_date < start_date:
-                raise serializers.ValidationError("End date must be after start date")
-        # If end date is provided but start date is not, raise an error
-        elif not start_date and end_date:
-            raise serializers.ValidationError("Start date must be provided if end date is set")
-        
-        return data 
     
 class SuggestionSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
@@ -88,4 +72,8 @@ class SuggestionSerializer(serializers.ModelSerializer):
         ]
 
     def get_categories(self, obj):
-        return [{"key": category.key, "label": category.label} for category in obj.categories.all()]
+        return [
+            {"id": category.id, "key": category.key, "label": category.label} 
+            for category in obj.categories.all()
+        ]
+    

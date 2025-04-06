@@ -7,8 +7,8 @@
       "categories": [5],
       "description": "Your exclusive signature dish, Bloomin' Onion, is a unique menu item that competitors don't offer. \nLeverage this exclusivity to attract more customers by showcasing it on social media.",
       "created_at": "2024-04-16T12:00:00Z",
-      "start_date": "2024-05-01T00:00:00Z",
-      "end_date": "2024-05-07T23:59:59Z",
+      "start_date": "2024-05-01",
+      "end_date": "2024-05-07",
       "sold_count": 158
     }
   },
@@ -20,8 +20,8 @@
       "categories": [1, 2],
       "description": "40% of customers who order Seafood Pasta also pair it with a glass of white wine.\nBased on past sales data, offering a 15% discount on this combo can increase sales while maintaining profitability.",
       "created_at": "2024-09-16T12:00:00Z",
-      "start_date": "2025-03-01T00:00:00Z",
-      "end_date": "2025-04-15T23:59:59Z",
+      "start_date": "2025-03-01",
+      "end_date": "2025-04-15",
       "sold_count": 84
     }
   },
@@ -33,8 +33,8 @@
       "categories": [3, 4],
       "description": "As the weather cools down in March, warm comfort foods become more popular.\nData shows that sales of hot soup dishes increased by 18% during this period last year.\nConsider adding Pumpkin Soup to your menu.",
       "created_at": "2025-04-16T12:00:00Z",
-      "start_date": "2025-04-17T00:00:00Z",
-      "end_date": "2025-04-30T23:59:59Z",
+      "start_date": "2025-04-17",
+      "end_date": "2025-04-30",
       "sold_count": 0
     }
   }

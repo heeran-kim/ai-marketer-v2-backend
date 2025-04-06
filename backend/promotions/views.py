@@ -72,3 +72,16 @@ class PromotionViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(business=business)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        """Update a specific promotion"""
+        partial = kwargs.pop('partial', False)
+        promotion, error_response = self.get_promotion(kwargs.get('pk'), request.user)
+        if error_response:
+            return error_response
+        
+        serializer = self.get_serializer(promotion, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response(serializer.data)
