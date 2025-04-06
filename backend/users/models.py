@@ -17,6 +17,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False) # Needed for Django Admin panel access
     date_joined = models.DateTimeField(auto_now_add=True) # Stores when the user registered
     requires_2fa = models.BooleanField(default=False) # Boolean for if the user is using 2FA
+    secret_2fa = models.CharField(max_length=255,blank=True,null=True) #The field for storing the TOTP
 
     objects = UserManager() # Assign custom UserManager for object creation
 

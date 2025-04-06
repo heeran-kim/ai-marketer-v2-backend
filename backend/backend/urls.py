@@ -38,6 +38,7 @@ urlpatterns = [
     path("api/posts/", include("posts.urls")),
     path("api/promotions/", include("promotions.urls")),
     path("api/ai/", include("ai.urls")),
+    path("api/sales/", include('sales.urls')),
 ]
 
 if settings.DEBUG:

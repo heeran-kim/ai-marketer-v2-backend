@@ -1,8 +1,8 @@
+# posts/urls.py
 from django.urls import path
-from .views import PostListView, PostCreateView, PostDeleteView
+from .views import PostListCreateView, PostDetailView
 
 urlpatterns = [
-    path("", PostListView.as_view(), name="post_list"),             # GET /api/posts/
-    path("create/", PostCreateView.as_view(), name="post_create"),  # GET/POST /api/posts/create/
-    path("<int:pk>/delete/", PostDeleteView.as_view(), name="post_delete"), # DELETE /api/posts/{id}/delete
+    path("", PostListCreateView.as_view(), name="post_list_create"), # LIST, CREATE GET,POST /api/posts/
+    path("<int:pk>/", PostDetailView.as_view(), name="post_detail"), # GET,PATCH,DELETE /api/posts/{id}/
 ]

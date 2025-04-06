@@ -69,3 +69,6 @@ Werkzeug
 pyOpenSSL
 gunicorn
 drf-spectacular
+pyotp
+qrcode
+Fernet

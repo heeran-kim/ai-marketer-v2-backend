@@ -12,8 +12,20 @@ import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
 
+from cryptography.fernet import Fernet #cryptography package
+
+from django.http import JsonResponse
+import pyotp
+import qrcode
+import base64
+import os
+from io import BytesIO
+
+
 # Get the custom User model
 User = get_user_model()
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 
 # Setup logger for debugging and tracking requests
 logger = logging.getLogger(__name__)
@@ -60,6 +72,8 @@ class LoginView(APIView):
     def post(self, request):
         """Handles user login requests dynamically and generates tokens"""
         serializer_class = self.get_serializer_class()
+        #TODO: Remove bottom line (its for debugging)
+        #logger.info(f"{serializer_class} {request.data.get('method')}")
         if not serializer_class:
             return Response(
                 {"error": f"Unsupported login method: {request.data.method}"},
@@ -173,4 +187,72 @@ class ResetPasswordView(GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"message": "Password has been reset"}, status=status.HTTP_200_OK)
+
+
+class Check2FA(APIView):
+    # permission_classes = [AllowAny]
+    # parser_classes = [JSONParser]
+    # serializer_class = TWOFASerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code=request.data.get('code')
+
+        user=request.user
+        #if code is given then user is trying to add 2fa
+        if(code!=''):
+            #try check if the code is valid      
+            f = Fernet(TWOFA_ENCRYPTION_KEY) 
+            otp_code = code
+            secret=user.secret_2fa[1:]  #do 1: to not include byte identifier
+            secret_decrypted=f.decrypt(secret)
+            secret_decoded=secret_decrypted.decode()
+            totp = pyotp.TOTP(secret_decoded)
+
+            if not totp.verify(otp_code):
+                return Response({'status': False}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.requires_2fa = True
+            user.save()
+            return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+        #else user is just checking if it is enabled
+
+        return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+    
+class Remove2FA(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user=request.user
+        user.secret_2fa = ""
+        user.requires_2fa = False
+        user.save()
+        return Response({"status": user.requires_2fa}, status=status.HTTP_200_OK)
+    
+class Enable2FA(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        user=request.user
+
+        secret = pyotp.random_base32()
+        secret_bytes = str.encode(secret) #convert to bytes
+        f = Fernet(TWOFA_ENCRYPTION_KEY) #assign encryption key
+        # the plaintext is converted to ciphertext 
+        secret_encrypted = f.encrypt(secret_bytes) 
+        
+
+        user.secret_2fa = secret_encrypted
+        user.save()
+        #generate qr code
+        otp_uri = pyotp.totp.TOTP(secret).provisioning_uri(user.email, issuer_name="AI-Marketer")
+        qr = qrcode.make(otp_uri)
+        buffer = BytesIO()
+        qr.save(buffer, format="PNG")
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()  #convert image to Base64
+
+        return JsonResponse({"qr_code": f"data:image/png;base64,{qr_base64}"})
 

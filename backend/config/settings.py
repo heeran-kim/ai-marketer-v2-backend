@@ -32,6 +32,10 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable is not set.")
 
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+if not TWOFA_ENCRYPTION_KEY:
+    raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [
@@ -57,6 +61,7 @@ INSTALLED_APPS = [
     'posts',
     'promotions',
     'ai',
+    'sales',
     "django_extensions",
 ]
 
@@ -206,11 +211,11 @@ DATABASES = {
 
 # LANGUAGE_CODE = "en-us"
 #
-# TIME_ZONE = "UTC"
+TIME_ZONE = 'UTC'
 #
 # USE_I18N = True
 #
-# USE_TZ = True
+USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
@@ -228,8 +233,6 @@ AUTH_USER_MODEL = 'users.User'
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
-
-# Logging Settings
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -241,24 +244,24 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",
+            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
     },
     "root": {
-        "level": "DEBUG",
+        "level": "INFO",
         "handlers": ["console"],
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "INFO",
             "propagate": False,
         },
         "users": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "INFO",
             "propagate": False,
         },
     },

@@ -1,7 +1,12 @@
+# posts/models.py
 from django.db import models
 from businesses.models import Business
 from social.models import SocialMedia
+from promotions.models import Promotion
 from config.constants import POST_CATEGORIES_OPTIONS, POST_STATUS_OPTIONS
+
+def post_image_path(instance, filename):
+    return f'business_posts/{instance.business.id}/{instance.id}.jpg'
 
 class Category(models.Model):
     key = models.CharField(max_length=50, unique=True)  # Category key (e.g., 'brand_story')
@@ -15,7 +20,7 @@ class Post(models.Model):
     platform = models.ForeignKey(SocialMedia, on_delete=models.CASCADE, related_name="posts")
     categories = models.ManyToManyField(Category, related_name="posts")
     caption = models.TextField()  # Text for the post's caption or message
-    image = models.ImageField(upload_to="post_images/")
+    image = models.ImageField(upload_to=post_image_path)
     link = models.URLField(blank=True, null=True)  # Optional URL (e.g., link to a website)
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the post was created
     posted_at = models.DateTimeField(blank=True, null=True) # Timestamp when post is published
@@ -29,6 +34,16 @@ class Post(models.Model):
     comments = models.IntegerField(default=0) # Store number of comments
     reposts = models.IntegerField(default=0)
     shares = models.IntegerField(default=0)
+    
+    # Direct FK relationship to track which promotional campaign this post belongs to
+    # Optional to allow posts that aren't part of any promotion
+    promotion = models.ForeignKey(
+        Promotion,
+        on_delete=models.CASCADE,
+        related_name="posts",
+        null=True,
+        blank=True
+    )
     
     def __str__(self):
         return f"Post: {self.categories} - {self.caption}"

@@ -2,7 +2,17 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
 
+import pyotp
+import qrcode
+import os
+
+from cryptography.fernet import Fernet #cryptography package
+
 User = get_user_model() # AUTH_USER_MODEL = 'users.User'
+
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
@@ -43,7 +53,7 @@ class TraditionalLoginSerializer(serializers.Serializer):
         # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
 
         if (user.requires_2fa):
-            raise serializers.ValidationError({"error": "Requires 2FA."})
+            raise serializers.ValidationError({"error": "Requires 2FA Code."})
 
 
         return user # Return the authenticated user
@@ -98,7 +108,7 @@ class TwoFactorVerificationSerializer(serializers.Serializer):
     """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=6)
-    otp = serializers.CharField()
+    code = serializers.CharField()
 
     def validate(self, data):
         """
@@ -108,7 +118,32 @@ class TwoFactorVerificationSerializer(serializers.Serializer):
         - If authentication is successful, check if the OTP is valid.
         - If both checks pass, return the authenticated user.
         """
-        pass
+        user = authenticate(email=data['email'], password=data['password'])
+        if not user:
+            raise serializers.ValidationError({"error": "Incorrect email or password."})
+
+        # TODO: If user has 2FA enabled, return a response indicating that OTP is required.
+
+        if (user.requires_2fa==False):
+            raise serializers.ValidationError({"error": "User doesn't require 2FA!"})
+
+        #raise serializers.ValidationError({"error": data.keys()})
+
+        if not (user.secret_2fa):
+            raise serializers.ValidationError({"error": "User doesn't require 2FA!"})
+        
+        f = Fernet(TWOFA_ENCRYPTION_KEY) 
+        otp_code = data['code']
+        secret=user.secret_2fa[1:]  #do 1: to not include byte identifier
+        secret_decrypted=f.decrypt(secret)
+        secret_decoded=secret_decrypted.decode()
+        totp = pyotp.TOTP(secret_decoded)
+
+        if totp.verify(otp_code):
+            return user # Return the authenticated user
+        else:
+            raise serializers.ValidationError({"error": "Wrong Authentication Code!"})
+        
 
 class ForgotPasswordSerializer(serializers.Serializer):
     """
