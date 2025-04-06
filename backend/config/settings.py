@@ -36,6 +36,10 @@ TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 if not TWOFA_ENCRYPTION_KEY:
     raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
 
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
+if not FACEBOOK_APP_ID:
+    raise ValueError("FACEBOOK_APP_ID environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [

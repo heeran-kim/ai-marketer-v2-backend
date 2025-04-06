@@ -9,9 +9,13 @@ from .serializers import SocialMediaSerializer
 import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import social_accounts_list_schema, social_disconnect_schema, social_connect_schema, oauth_callback_schema
+import os
 
 # Setup logger for debugging and tracking requests
 logger = logging.getLogger(__name__)
+
+#For Facebook API ID
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
 
 class LinkedSocialAccountsView(APIView):
     """
@@ -31,8 +35,16 @@ class ConnectSocialAccountView(APIView):
     parser_classes = [JSONParser]
 
     @extend_schema(**social_connect_schema)
-    def post(self, request):
+    def post(self, request, provider):
         # TODO: Implement logic to generate OAuth URL for the social media provider
+        
+        if provider=="instagram" or provider=="facebook":
+            client_id = FACEBOOK_APP_ID  # Your App ID from Facebook
+            redirect_uri = 'https://localhost:3000/settings/social'
+            scope = 'email,instagram_basic,pages_show_list'
+            login_url = f"https://www.facebook.com/v19.0/dialog/oauth?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}&response_type=code"
+            return Response({'link':login_url},status=status.HTTP_200_OK)
+
         return Response({"message": "OAuth initiation is not yet implemented."}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 class OAuthCallbackView(APIView):
