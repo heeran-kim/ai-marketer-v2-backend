@@ -16,8 +16,8 @@ class Promotion(models.Model):
     business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="promotions")
     categories = models.ManyToManyField(PromotionCategories, related_name="promotions")
     description = models.TextField()
-    start_date = models.DateTimeField(null=True, blank=True)
-    end_date = models.DateTimeField(null=True, blank=True)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
     sold_count = models.PositiveIntegerField(default=0, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
