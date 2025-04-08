@@ -57,13 +57,7 @@ class FinalizeOauthView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
-    def post(self, request):
-        # TODO: Implement logic to process the OAuth callback and store access token
-        code=request.data.get('code')
-        provider=request.data.get('provider')
-        if(not code):
-            return Response({'message': 'No Oauth Code provided!'}, status=status.HTTP_400_BAD_REQUEST)
-        
+    def get_access_token(self,code,provider,user):
         #Get Meta's access token
         app_id = FACEBOOK_APP_ID
         app_secret = FACEBOOK_SECRET
@@ -81,66 +75,89 @@ class FinalizeOauthView(APIView):
         if response.status_code == 200:
             # Successful exchange, get the access token
             data = response.json()
-            user=request.user
             user.access_token=data['access_token']
             user.save()
-
-            #Retrieve the data from Meta's API
-            user=request.user
-            access_token=user.access_token
-            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
-            response = requests.get(url)
-            #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
-            if response.status_code != 200:
-                # Handle error response    
-                return Response({'message': 'Meta API Request Failed!'}, status=response.status_code)
-            metasData = response.json()
-
-
-            #For retriving the Instagram account
-            instagram_account=None
-            instagram_link=None
-            if(provider=="instagram"):
-                #get the Instagram account ID
-                url = f'https://graph.facebook.com/v22.0/{metasData["data"][0]["id"]}?fields=instagram_business_account&access_token={access_token}'
-                response = requests.get(url)
-                data=response.json()
-                if response.status_code != 200:
-                    # Handle error response    
-                    return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account!'}, status=response.status_code)
-                #get the Instagram account Name
-                url = f'https://graph.facebook.com/v22.0/{data["instagram_business_account"]["id"]}?fields=username&access_token={access_token}'
-                response = requests.get(url)
-                data=response.json()
-                if response.status_code != 200:
-                    # Handle error response    
-                    return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account Username!'}, status=response.status_code)
-                instagram_account=data["username"]
-                instagram_link=f'https://www.instagram.com/{data["username"]}/'
-                #return Response({'message': instagram_account}, status=status.HTTP_200_OK)
-            
-            # Now save the updated social media account to the database
-            business = Business.objects.filter(owner=request.user).first()
-            linked_platform = SocialMedia.objects.filter(business=business, platform=provider)
-            if not linked_platform.exists():
-                # Create a new SocialMedia instance if it doesn't exist
-                social_media = SocialMedia.objects.create(
-                    business=business,
-                    platform=provider,
-                    username=metasData['data'][0]['name'] if provider=="facebook" else instagram_account,
-                    link=f'https://www.facebook.com/{metasData["data"][0]["id"]}' if provider=="facebook" else instagram_link,
-                )
-                social_media.save()
-            else:
-                # Update the existing instance
-                linked_platform.first().username=metasData['data'][0]['name']
-                linked_platform.first().link= f'https://www.facebook.com/{metasData["data"][0]["id"]}'
-                linked_platform.first().save()
-
-            return Response({'message': 'Successfully linked!'}, status=status.HTTP_200_OK)
-
-        return Response({"message": "OAuth code expired or invalid for Meta API! Please reconnect via Settings!"}, status=status.HTTP_400_BAD_REQUEST)
     
+    def get_facebook_page_id(self,access_token,user):
+        #Retrieve facebook page id data from Meta's API
+        access_token=user.access_token
+        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
+        response = requests.get(url)
+        #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
+        if response.status_code != 200:
+            # Handle error response    
+            return Response({'message': 'Meta API Request Failed!'}, status=response.status_code)
+        metasData = response.json()
+        if not metasData.get("data"):
+            return Response({'message': 'No data returned from Meta API'}, status=status.HTTP_400_BAD_REQUEST)
+        return metasData.get("data")[0]
+
+    def get_instagram_data(self,access_token,metasData):
+        #get the Instagram account ID
+        url = f'https://graph.facebook.com/v22.0/{metasData["id"]}?fields=instagram_business_account&access_token={access_token}'
+        response = requests.get(url)
+        data=response.json()
+        if response.status_code != 200:
+            # Handle error response    
+            return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account!'}, status=response.status_code)
+        insta_account_data = data.get("instagram_business_account")
+        if not insta_account_data:
+            return Response({'message': 'No Instagram account linked!'}, status=status.HTTP_400_BAD_REQUEST)
+        #get the Instagram account Name
+        url = f'https://graph.facebook.com/v22.0/{data["instagram_business_account"]["id"]}?fields=username&access_token={access_token}'
+        response = requests.get(url)
+        data=response.json()
+        if response.status_code != 200:
+            # Handle error response    
+            return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account Username!'}, status=response.status_code)
+        instagram_account=data["username"]
+        instagram_link=f'https://www.instagram.com/{data["username"]}/'
+        return instagram_account,instagram_link
+        #return Response({'message': instagram_account}, status=status.HTTP_200_OK)
+
+    def save_to_db(self,provider,access_token,user,metasData,instagram_account=None,instagram_link=None):
+        # Now save the updated social media account to the database
+        business = Business.objects.filter(owner=user).first()
+        linked_platform = SocialMedia.objects.filter(business=business, platform=provider)
+        if not linked_platform.exists():
+            # Create a new SocialMedia instance if it doesn't exist
+            social_media = SocialMedia.objects.create(
+                business=business,
+                platform=provider,
+                username=metasData["name"] if provider=="facebook" else instagram_account,
+                link=f'https://www.facebook.com/{metasData["id"]}' if provider=="facebook" else instagram_link,
+            )
+            social_media.save()
+        else:
+            # Update the existing instance
+            platform = linked_platform.first()
+            platform.username = metasData["name"] if provider == "facebook" else instagram_account
+            platform.link = f'https://www.facebook.com/{metasData["id"]}' if provider == "facebook" else instagram_link
+            platform.save()
+
+    def post(self, request):
+        # TODO: Implement logic to process the OAuth callback and store access token
+        code=request.data.get('code')
+        provider=request.data.get('provider')
+        if(not code):
+            return Response({'message': 'No Oauth Code provided!'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        self.get_access_token(code,provider,request.user)
+
+        facebook_data=self.get_facebook_page_id(request.user.access_token,request.user)
+            
+        #For retriving the Instagram account
+        instagram_account=None
+        instagram_link=None
+        if(provider=="instagram"):
+            insta_data=self.get_instagram_data(request.user.access_token,facebook_data)
+            instagram_account=insta_data[0]
+            instagram_link=insta_data[1]
+        
+        self.save_to_db(provider,request.user.access_token,request.user,facebook_data,instagram_account,instagram_link)
+
+        
+        return Response({'message': 'Successfully linked!'}, status=status.HTTP_200_OK)
 
 class OAuthCallbackView(APIView):
     permission_classes = [IsAuthenticated]
