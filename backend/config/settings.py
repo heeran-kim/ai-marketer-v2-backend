@@ -44,6 +44,10 @@ FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
 if not FACEBOOK_SECRET:
     raise ValueError("FACEBOOK_SECRET environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
 
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+if not FACEBOOK_REDIRECT_URI:
+    raise ValueError("FACEBOOK_REDIRECT_URI environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"

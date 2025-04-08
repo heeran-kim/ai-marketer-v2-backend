@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 #For Facebook API ID
 FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
 FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
 
 class LinkedSocialAccountsView(APIView):
     """
@@ -31,16 +32,6 @@ class LinkedSocialAccountsView(APIView):
         linked_platforms_queryset = SocialMedia.objects.filter(business=business)
         serialized_data = SocialMediaSerializer(linked_platforms_queryset, many=True).data
 
-        #Get the access token from the user
-        user=request.user
-        access_token=user.access_token
-        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
-        response = requests.get(url)
-        #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
-        if response.status_code == 200:
-            data = response.json()
-            #return Response(data,status=status.HTTP_200_OK)
-
         return Response(serialized_data, status=status.HTTP_200_OK)
 
 class ConnectSocialAccountView(APIView):
@@ -50,11 +41,13 @@ class ConnectSocialAccountView(APIView):
     @extend_schema(**social_connect_schema)
     def post(self, request, provider):
         # TODO: Implement logic to generate OAuth URL for the social media provider
-        
+        # business = Business.objects.filter(owner=request.user).first()
+        # other_meta_platform = SocialMedia.objects.filter(business=business, platform="instagram" if provider=="facebook" else "facebook") #check to see if the other meta social account is linked
         if provider=="instagram" or provider=="facebook":
             client_id = FACEBOOK_APP_ID
-            redirect_uri = f'https://localhost:3000/settings/social/{provider}'
-            scope = 'email,instagram_basic,pages_show_list'
+            redirect_uri = f'{FACEBOOK_REDIRECT_URI}{provider}'
+            #scope = 'pages_show_list,business_management,pages_read_engagement,instagram_basic,instagram_content_publish' if other_meta_platform.exists() else('pages_show_list,instagram_basic,instagram_content_publish' if provider=="instagram" else 'pages_show_list,business_management,pages_read_engagement')
+            scope = 'pages_show_list,business_management,pages_read_engagement,instagram_basic,instagram_content_publish'
             login_url = f"https://www.facebook.com/v22.0/dialog/oauth?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}&response_type=code"
             return Response({'link':login_url},status=status.HTTP_200_OK)
 
@@ -74,7 +67,7 @@ class FinalizeOauthView(APIView):
         #Get Meta's access token
         app_id = FACEBOOK_APP_ID
         app_secret = FACEBOOK_SECRET
-        redirect_uri = f'https://localhost:3000/settings/social/{provider}'
+        redirect_uri = f'{FACEBOOK_REDIRECT_URI}{provider}'
 
         url = 'https://graph.facebook.com/v22.0/oauth/access_token'
         params = {
