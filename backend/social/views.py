@@ -76,7 +76,7 @@ class FinalizeOauthView(APIView):
             # Successful exchange, get the access token
             data = response.json()
             user.access_token=data['access_token']
-            user.save()
+            user.save() #save it to the user database
     
     def get_facebook_page_id(self,access_token,user):
         #Retrieve facebook page id data from Meta's API
@@ -86,10 +86,11 @@ class FinalizeOauthView(APIView):
         #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
         if response.status_code != 200:
             # Handle error response    
-            return Response({'message': 'Meta API Request Failed!'}, status=response.status_code)
+            return None
         metasData = response.json()
         if not metasData.get("data"):
-            return Response({'message': 'No data returned from Meta API'}, status=status.HTTP_400_BAD_REQUEST)
+            return None
+        #else return the page id
         return metasData.get("data")[0]
 
     def get_instagram_data(self,access_token,metasData):
@@ -98,18 +99,18 @@ class FinalizeOauthView(APIView):
         response = requests.get(url)
         data=response.json()
         if response.status_code != 200:
-            # Handle error response    
-            return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account!'}, status=response.status_code)
+            # Handle error retrieving insta account id   
+            return None
         insta_account_data = data.get("instagram_business_account")
         if not insta_account_data:
-            return Response({'message': 'No Instagram account linked!'}, status=status.HTTP_400_BAD_REQUEST)
+            return None #return error if no instagram account found
         #get the Instagram account Name
         url = f'https://graph.facebook.com/v22.0/{data["instagram_business_account"]["id"]}?fields=username&access_token={access_token}'
         response = requests.get(url)
         data=response.json()
         if response.status_code != 200:
             # Handle error response    
-            return Response({'message': 'Meta API Request Failed For Retrieving Instagram Account Username!'}, status=response.status_code)
+            return None #return none if error fetching account data
         instagram_account=data["username"]
         instagram_link=f'https://www.instagram.com/{data["username"]}/'
         return instagram_account,instagram_link
@@ -144,19 +145,27 @@ class FinalizeOauthView(APIView):
         
         self.get_access_token(code,provider,request.user)
 
+        #For retriving the Facebook page id
         facebook_data=self.get_facebook_page_id(request.user.access_token,request.user)
-            
+        if not facebook_data:
+            return Response({'message': 'No Facebook page found!'}, status=status.HTTP_400_BAD_REQUEST)
+        
+
         #For retriving the Instagram account
         instagram_account=None
         instagram_link=None
         if(provider=="instagram"):
             insta_data=self.get_instagram_data(request.user.access_token,facebook_data)
+            if not insta_data:
+                return Response({'message': 'No Instagram account found!'}, status=status.HTTP_400_BAD_REQUEST)
             instagram_account=insta_data[0]
             instagram_link=insta_data[1]
         
-        self.save_to_db(provider,request.user.access_token,request.user,facebook_data,instagram_account,instagram_link)
-
-        
+        try:
+            self.save_to_db(provider,request.user.access_token,request.user,facebook_data,instagram_account,instagram_link)
+        except:
+            return Response({'message': 'Error saving to database!'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # If everything is successful, return a success response
         return Response({'message': 'Successfully linked!'}, status=status.HTTP_200_OK)
 
 class OAuthCallbackView(APIView):
@@ -166,9 +175,6 @@ class OAuthCallbackView(APIView):
     @extend_schema(**oauth_callback_schema)
     def get(self, request,provider):
         # TODO: Implement logic to process the OAuth callback and store access token
-        code=request.data.get('code')
-        if(code):
-            return Response({"message": code}, status=status.HTTP_200_OK)
         return Response({"message": "OAuth callback handling is not yet implemented."}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 class DisconnectSocialAccountView(APIView):
