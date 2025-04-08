@@ -164,7 +164,7 @@ class FinalizeOauthView(APIView):
         try:
             self.save_to_db(provider,request.user.access_token,request.user,facebook_data,instagram_account,instagram_link)
         except:
-            return Response({'message': 'Error saving to database!'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'message': 'Error saving to database! Make sure you have a business created first!'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         # If everything is successful, return a success response
         return Response({'message': 'Successfully linked!'}, status=status.HTTP_200_OK)
 
