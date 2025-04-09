@@ -1,9 +1,12 @@
 from django.urls import path
-from .views import LinkedSocialAccountsView, ConnectSocialAccountView, OAuthCallbackView, DisconnectSocialAccountView
+from .views import LinkedSocialAccountsView, ConnectSocialAccountView, OAuthCallbackView, DisconnectSocialAccountView, FinalizeOauthView
 
 urlpatterns = [
     # Fetch linked accounts
     path("accounts/", LinkedSocialAccountsView.as_view(), name="list-social-accounts"),
+
+    # Get access token from oauth code
+    path("finalize_oauth/", FinalizeOauthView.as_view(), name="finalize_oauth"),
 
     # Connect account (initiates OAuth flow)
     path("connect/<str:provider>/", ConnectSocialAccountView.as_view(), name="connect-social-account"),
