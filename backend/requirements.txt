@@ -71,4 +71,4 @@ gunicorn
 drf-spectacular
 pyotp
 qrcode
-Fernet
+cryptography==44.0.2

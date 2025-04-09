@@ -12,6 +12,13 @@ from .schemas import social_accounts_list_schema, social_disconnect_schema, soci
 import os
 import requests
 
+from cryptography.fernet import Fernet #cryptography package
+
+
+
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+
 # Setup logger for debugging and tracking requests
 logger = logging.getLogger(__name__)
 
@@ -75,12 +82,19 @@ class FinalizeOauthView(APIView):
         if response.status_code == 200:
             # Successful exchange, get the access token
             data = response.json()
-            user.access_token=data['access_token']
+            #Encrypt the access token
+            secret_bytes = str.encode(data['access_token']) #convert to bytes
+            f = Fernet(TWOFA_ENCRYPTION_KEY) #assign encryption key
+            secret_encrypted = f.encrypt(secret_bytes) 
+            # Save the encrypted access token to the user model
+            user.access_token=secret_encrypted
             user.save() #save it to the user database
+            return data['access_token']
+        else:
+            return None #return none if error fetching access token
     
-    def get_facebook_page_id(self,access_token,user):
+    def get_facebook_page_id(self,access_token):
         #Retrieve facebook page id data from Meta's API
-        access_token=user.access_token
         url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
         response = requests.get(url)
         #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
@@ -116,7 +130,7 @@ class FinalizeOauthView(APIView):
         return instagram_account,instagram_link
         #return Response({'message': instagram_account}, status=status.HTTP_200_OK)
 
-    def save_to_db(self,provider,access_token,user,metasData,instagram_account=None,instagram_link=None):
+    def save_to_db(self,provider,user,metasData,instagram_account=None,instagram_link=None):
         # Now save the updated social media account to the database
         business = Business.objects.filter(owner=user).first()
         linked_platform = SocialMedia.objects.filter(business=business, platform=provider)
@@ -143,10 +157,12 @@ class FinalizeOauthView(APIView):
         if(not code):
             return Response({'message': 'No Oauth Code provided!'}, status=status.HTTP_400_BAD_REQUEST)
         
-        self.get_access_token(code,provider,request.user)
-
+        access_token=self.get_access_token(code,provider,request.user)
+        if(not access_token):
+            return Response({'message': 'No access token found!'}, status=status.HTTP_400_BAD_REQUEST)
+        
         #For retriving the Facebook page id
-        facebook_data=self.get_facebook_page_id(request.user.access_token,request.user)
+        facebook_data=self.get_facebook_page_id(access_token)
         if not facebook_data:
             return Response({'message': 'No Facebook page found!'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -155,14 +171,14 @@ class FinalizeOauthView(APIView):
         instagram_account=None
         instagram_link=None
         if(provider=="instagram"):
-            insta_data=self.get_instagram_data(request.user.access_token,facebook_data)
+            insta_data=self.get_instagram_data(access_token,facebook_data)
             if not insta_data:
                 return Response({'message': 'No Instagram account found!'}, status=status.HTTP_400_BAD_REQUEST)
             instagram_account=insta_data[0]
             instagram_link=insta_data[1]
         
         try:
-            self.save_to_db(provider,request.user.access_token,request.user,facebook_data,instagram_account,instagram_link)
+            self.save_to_db(provider,request.user,facebook_data,instagram_account,instagram_link)
         except:
             return Response({'message': 'Error saving to database! Make sure you have a business created first!'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         # If everything is successful, return a success response
