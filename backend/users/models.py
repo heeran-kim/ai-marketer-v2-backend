@@ -19,6 +19,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     requires_2fa = models.BooleanField(default=False) # Boolean for if the user is using 2FA
     secret_2fa = models.CharField(max_length=255,blank=True,null=True) #The field for storing the TOTP
 
+    access_token = models.CharField(max_length=512,blank=True, null=True) # Store the access token for Meta
+
     objects = UserManager() # Assign custom UserManager for object creation
 
     USERNAME_FIELD = "email" # Use email as the unique login field

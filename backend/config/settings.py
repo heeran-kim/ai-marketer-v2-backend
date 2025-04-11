@@ -36,6 +36,19 @@ TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 if not TWOFA_ENCRYPTION_KEY:
     raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
 
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
+if not FACEBOOK_APP_ID:
+    raise ValueError("FACEBOOK_APP_ID environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
+if not FACEBOOK_SECRET:
+    raise ValueError("FACEBOOK_SECRET environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+if not FACEBOOK_REDIRECT_URI:
+    raise ValueError("FACEBOOK_REDIRECT_URI environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [
@@ -92,7 +105,7 @@ CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "https://localhost:3000
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "https://localhost:3000,https://127.0.0.1:3000"
+    "https://localhost:3000,https://127.0.0.1:3000,https://ai-marketer-v2-frontend.vercel.app"
 ).split(",")
 
 # DRF Default Authentication Settings
