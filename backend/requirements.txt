@@ -72,3 +72,4 @@ pyotp
 qrcode
 Fernet
 squareup==41.0.0.20250319
+openai

@@ -68,7 +68,12 @@ def check_square_integration(business):
                         filtered_items = [
                             {
                                 "name": item["item_data"].get("name", ""),
-                                "description": item["item_data"].get("description", "")
+                                "description": item["item_data"].get("description", ""),
+                                "price": ", ".join(
+                                    f"{variation.get('item_variation_data', '').get('name', '')}{' ' if variation.get('item_variation_data', '').get('name', '') else ''}${variation.get('item_variation_data', {}).get('price_money', {}).get('amount', 0) / 100}"
+                                    for variation in item["item_data"].get("variations", [])
+                                    if "item_variation_data" in variation
+                                )
                             }
                             for item in items
                             if item.get("type") == "ITEM" and "item_data" in item

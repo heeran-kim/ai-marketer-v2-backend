@@ -1,15 +1,15 @@
 [
-    {
+  {
     "model": "businesses.business",
     "pk": 1,
     "fields": {
-        "name":"The Great Steakhouse",
-        "logo":"business_logos/1/logo.jpg",
-        "category":"Restaurant",
-        "target_customers":"18-35 years old, mostly foodies",
-        "vibe":"Cozy & premium dining experience",
-        "owner":2,
-        "created_at":"2024-01-15T00:53:21.509Z"
+      "name": "Vinos",
+      "logo": "business_logos/1/logo.jpg",
+      "category": "Tapas Bar",
+      "target_customers": "Young professionals & foodies",
+      "vibe": "Rustic, cozy, and sociable night",
+      "owner": 2,
+      "created_at": "2024-01-15T00:53:21.509Z"
     }
-    }
+  }
 ]
