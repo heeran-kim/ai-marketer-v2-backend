@@ -13,6 +13,15 @@ from social.models import SocialMedia
 from posts.models import Post, Category
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
 import logging
+import requests
+import os
+from PIL import Image
+import io
+
+from cryptography.fernet import Fernet #cryptography package
+
+TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +61,98 @@ class PostListCreateView(ListCreateAPIView):
         }
 
         return Response(response_data)
+    
+    def get_facebook_page_id(self,access_token):
+        #Retrieve facebook page id data from Meta's API
+        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
+        response = requests.get(url)
+        #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
+        if response.status_code != 200:
+            # Handle error response    
+            return None
+        metasData = response.json()
+        if not metasData.get("data"):
+            return None
+        #else return the page id
+        return metasData.get("data")[0]["id"]
+    
+    def returnInstagramDetails(self,facebookPageID,access_token):
+        url = f'https://graph.facebook.com/v22.0/{facebookPageID}?fields=instagram_business_account&access_token={access_token}'
+        response = requests.get(url)
+        data=response.json()
+        if response.status_code != 200:
+            # Handle error retrieving insta account id   
+            return None
+        insta_account_data = data.get("instagram_business_account")
+        if not insta_account_data:
+            return None #return error if no instagram account found
+        return insta_account_data.get("id") #return the instagram account id
+        
+
+    
+    def publishToMeta(self, platform, caption, image_file, user):
+        f = Fernet(TWOFA_ENCRYPTION_KEY) 
+        token=user.access_token[1:]  #do 1: to not include byte identifier
+        token_decrypted=f.decrypt(token)
+        token_decoded=token_decrypted.decode()
+
+        facebookPageID=self.get_facebook_page_id(token_decoded)
+        if not facebookPageID:
+            return {"error": "Unable to retrieve Facebook Page ID", "status": False}
+        # Get the Instagram account ID
+        instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
+        if not instagram_account_id:    
+            return {"error": "Unable to retrieve Insta ID", "status": False}
+
+        #Get Image setup
+        headers = {
+            'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
+        }
+        image_file.file.seek(0)
+        img = Image.open(image_file)
+        img = img.resize((1080, 1350))  # 4:5 portrait
+        # Save to in-memory buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG')
+        buffer.seek(0)
+        files = {'image': ('image.jpg', buffer, 'image/jpeg')}
+        response = requests.post(
+            'https://api.imgur.com/3/image',
+            headers=headers,
+            files=files
+        )
+        if response.status_code != 200:
+            return {"error": f"Unable to upload to Imgur | text:{response.text}", "status": False}
+        image_url = response.json()['data']['link']
+        alt_text="This is the alt text for the image"
+
+        #Create media object
+        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media?image_url={image_url}&caption={caption}&alt_text={alt_text}&access_token={token_decoded}'
+        response = requests.post(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": f"Unable to create Media Obj | text:{response.text} link:{image_url}", "status": False}
+        media_data = response.json()
+        if not media_data.get("id"):
+            return {"error": "Unable to retrieve media ID", "status": False}
+        media_id = media_data.get("id")
+        #Publish the media object
+        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media_publish?creation_id={media_id}&access_token={token_decoded}'
+        response = requests.post(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": "Unable to publish media obj", "status": False}
+        publish_data = response.json()
+        if not publish_data.get("id"):
+            return {"error": "Unable to retrieve publish ID", "status": False}
+        post_id = publish_data.get("id")
+        # Return the post ID
+        return {"message": {post_id}, "status": True}
+
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True) # TODO
-        self.perform_create(serializer)
+        serializer.is_valid(raise_exception=True)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -150,7 +246,22 @@ class PostListCreateView(ListCreateAPIView):
             status=post_status,
             promotion=promotion
         )
+
+        match data["platform"]:
+            case 'facebook':
+                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+            case 'instagram':
+                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user)
+                if (response.get("status") == False):
+                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                # post.link = f'https://www.instagram.com/p/{response.get("message")}/'
+                # post.save()
+            case 'twitter':
+                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+            case _:
+                return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
         
+        # return Response({"message": "Post not created successfully!"}, status=status.HTTP_400_BAD_REQUEST)
         categories_data = json.loads(data.get("categories", "[]"))
         categories = Category.objects.filter(id__in=categories_data)
         post.categories.set(categories)
