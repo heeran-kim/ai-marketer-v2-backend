@@ -22,10 +22,18 @@ class SalesData(models.Model):
         return f"{self.filename} - {self.business.name}"
 
 class SalesDataPoint(models.Model):
+    SOURCE_CHOICES = (
+        ('upload', 'Uploaded File'),
+        ('square', 'Square Sync'),
+    )
     business = models.ForeignKey(Business, on_delete=models.CASCADE)
     date = models.DateField()
     revenue = models.DecimalField(max_digits=10, decimal_places=2)
-    source_file = models.ForeignKey(SalesData, on_delete=models.CASCADE)
+    source_file = models.ForeignKey(SalesData, on_delete=models.CASCADE, null=True, blank=True)
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='upload')
     
     class Meta:
-        unique_together = ['business', 'date']
+        unique_together = ['business', 'date', 'source']
+    
+    def __str__(self):
+        return f"{self.business} - {self.date}: ${self.revenue}"

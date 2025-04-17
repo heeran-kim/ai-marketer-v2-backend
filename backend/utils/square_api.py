@@ -1,6 +1,12 @@
+from sales.models import SalesDataPoint
 from config import settings
 from businesses.serializers import SquareItemSerializer
 from square.client import Client
+from datetime import datetime, timedelta
+from pytz import timezone
+from django.db import transaction 
+from collections import defaultdict
+from decimal import Decimal
 import base64
 import secrets
 import requests
@@ -54,28 +60,6 @@ def get_square_locations(client):
         logger.warning("Failed to fetch Square locations")
     except Exception as e:
         logger.error(f"Square locations fetch error: {e}")
-    return []
-
-def get_square_orders(client, location_id):
-    """Fetch list of orders."""
-    try:
-        orders_api = client.orders
-        search_body = {
-            "location_ids": [location_id],
-            "limit": 10, # TODO
-            "sort": {
-                "sort_field": "CREATED_AT",
-                "sort_order": "DESC"
-            }
-        }
-        order_response = orders_api.search_orders(body=search_body)
-        if order_response.is_success():
-            orders = order_response.body.get("orders", [])
-            logger.debug(f"Orders fetched: {orders}")
-            return orders
-        logger.warning("Failed to fetch Square orders")
-    except Exception as e:
-        logger.error(f"Square orders fetch error: {e}")
     return []
 
 def get_square_items(client):
@@ -197,3 +181,104 @@ def format_square_item(item):
         "variations": variations,
         "categories": categories
     }
+
+def fetch_and_save_square_sales_data(business):
+    """
+    Fetch sales data from Square API and save it to the database.
+    Args:
+        business (Business): The business object for which to fetch sales data.
+    """
+    # Calculate the date range
+    end_date = datetime.now(timezone('UTC')).isoformat()
+    
+    # Check if last_square_sync_at is set, otherwise default to 30 days ago
+    if business.last_square_sync_at:
+        start_date = business.last_square_sync_at.isoformat()
+    else:
+        start_date = (datetime.now(timezone('UTC')) - timedelta(days=30)).isoformat()
+
+    # Get location id
+    client = get_square_client(business)
+    locations = get_square_locations(client)
+    if not locations:
+        logger.error("No Square location found.")
+        return
+    location_id = locations[0].get("id") if locations else None
+
+    # Square API endpoint for payments (sales data)
+    url = f"{settings.SQUARE_BASE_URL}/v2/payments"
+    
+    headers = {
+        "Authorization": f"Bearer {business.square_access_token}",
+        "Content-Type": "application/json"
+    }
+
+    params = {
+        "begin_time": start_date,
+        "end_time": end_date,
+        "sort_field": "CREATED_AT",
+        "sort_order": "DESC",
+        "location_id": location_id,
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code != 200:
+        logger.error(f"Error fetching sales data: {response.status_code}, {response.text}")
+        raise Exception(f"Square API error: {response.status_code}, {response.text}")
+
+    sales_data = response.json()
+    logger.debug(f"Sales data fetched successfully: {sales_data}")
+
+    if sales_data:
+        # Prepare the sales data for saving
+        business_timezone = timezone('Australia/Brisbane')
+        daily_revenue = defaultdict(Decimal)
+        
+        for payment in sales_data['payments']:
+            payment_date = payment['created_at']
+            revenue = Decimal(payment['amount_money']['amount']) / Decimal(100)  # Convert cents to dollars
+            
+            # Parse the payment date into a datetime object (UTC)
+            payment_date_obj = datetime.strptime(payment_date, '%Y-%m-%dT%H:%M:%S.%fZ')
+            
+            # Convert to local time
+            payment_date_obj_local = payment_date_obj.astimezone(business_timezone).date()
+
+            daily_revenue[payment_date_obj_local] += revenue
+
+        logger.debug(f"Daily revenue calculated: {daily_revenue}")
+        
+        # Prepare the sales data points for saving or updating
+        sales_points = []
+        for day, amount in daily_revenue.items():
+            # Check if the sales data point already exists
+            existing_point = SalesDataPoint.objects.filter(
+                business=business, date=day, source='square'
+            ).first()
+
+            if existing_point:
+                # Update the existing record
+                existing_point.revenue += amount
+                sales_points.append(existing_point)
+            else:
+                # Create a new record
+                sales_points.append(SalesDataPoint(business=business, date=day, revenue=amount, source='square'))
+
+        logger.debug(f"Prepared {sales_points} sales data points for saving.")
+
+        # Save the sales data to the database within a transaction
+        if sales_points:
+            with transaction.atomic():
+                # Bulk create or update
+                SalesDataPoint.objects.bulk_update(
+                    [point for point in sales_points if point.pk is not None], ['revenue']
+                )
+                SalesDataPoint.objects.bulk_create(
+                    [point for point in sales_points if point.pk is None]
+                )
+                logger.debug(f"Saved {len(sales_points)} sales data points to the database.")
+    
+    business.last_square_sync_at = datetime.now(timezone('UTC'))
+    business.save()
+    logger.debug(f"Updated last_square_sync_at for business {business.id} to {business.last_square_sync_at}")

@@ -5,8 +5,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from sales.models import SalesDataPoint
 from config import settings
-from utils.square_api import exchange_code_for_token, get_auth_url_values, get_square_client, get_square_locations, format_square_item
+from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, format_square_item
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
@@ -204,7 +205,7 @@ class SquareViewSet(viewsets.ViewSet):
         auth_url = (
             f"{settings.SQUARE_BASE_URL}/oauth2/authorize"
             f"?client_id={auth_url_values['app_id']}"
-            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ"
+            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ+PAYMENTS_READ"
             f"&session=false&state={auth_url_values['state']}"
             f"&redirect_uri={auth_url_values['redirect_uri']}"
         )
@@ -248,6 +249,9 @@ class SquareViewSet(viewsets.ViewSet):
         business.save()
         logger.info(f"Square access token: {access_token}")
 
+        # After saving access token, fetch and save the sales data
+        fetch_and_save_square_sales_data(business)
+
         # After successful connection, pop the state from the session
         request.session.pop('square_oauth_state', None)
         
@@ -262,7 +266,11 @@ class SquareViewSet(viewsets.ViewSet):
         
         # Remove the access token and disconnect the business
         business.square_access_token = None
+        business.last_square_sync_at = None
         business.save()
+
+        # Delete Square-originated sales data points
+        SalesDataPoint.objects.filter(business=business, source="square").delete()
         
         return Response({"message": "Square integration deleted successfully"}, status=status.HTTP_200_OK)
     
@@ -275,7 +283,11 @@ class SquareViewSet(viewsets.ViewSet):
 
         client = get_square_client(business)
         if not client:
-            return Response({"error": "Square not connected"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "square_connected": False,
+                "items": [],
+                "categories": []
+            }, status=status.HTTP_200_OK)
 
         try:
             # Get catalog items
@@ -310,9 +322,10 @@ class SquareViewSet(viewsets.ViewSet):
                         items.append(item)
             
             return Response({
+                "square_connected": True,
                 "items": items,
                 "categories": categories
-            })
+            }, status=status.HTTP_200_OK)
         
         except Exception as e:
             logger.error(f"Square items fetch error: {e}")
