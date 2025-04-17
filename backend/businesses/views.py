@@ -6,12 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from config import settings
-from utils.square_api import exchange_code_for_token, get_auth_url_values, get_square_client, get_square_locations
+from utils.square_api import exchange_code_for_token, get_auth_url_values, get_square_client, get_square_locations, format_square_item
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
 from posts.models import Post
-import os
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -265,3 +265,126 @@ class SquareViewSet(viewsets.ViewSet):
         business.save()
         
         return Response({"message": "Square integration deleted successfully"}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'], url_path='items')
+    def list_items(self, request):
+        """Retrieve items from Square for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        client = get_square_client(business)
+        if not client:
+            return Response({"error": "Square not connected"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # Get catalog items
+            catalog_api = client.catalog
+            
+            # Get categories
+            categories_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["CATEGORY"]
+            )
+            
+            categories = []
+            if categories_response.is_success():
+                for obj in categories_response.body.get("objects", []):
+                    if obj.get("type") == "CATEGORY" and "category_data" in obj:
+                        categories.append({
+                            "id": obj["id"],
+                            "name": obj["category_data"]["name"]
+                        })
+            
+            # Get items
+            items_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["ITEM"]
+            )
+
+            items = []
+            if items_response.is_success():
+                for obj in items_response.body.get("objects", []):
+                    item = format_square_item(obj)
+                    if item:
+                        items.append(item)
+            
+            return Response({
+                "items": items,
+                "categories": categories
+            })
+        
+        except Exception as e:
+            logger.error(f"Square items fetch error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'], url_path='items/(?P<item_id>[^/.]+)')
+    def update_item(self, request, item_id=None):
+        """Update a menu item in Square."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        client = get_square_client(business)
+        if not client:
+            return Response({"error": "Square not connected"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            catalog_api = client.catalog
+
+            item_response = catalog_api.retrieve_catalog_object(object_id=item_id, include_related_objects=True)
+            latest_version = item_response.body["object"]["version"]
+            logger.info(f"Latest version of item {item_id}: {latest_version}")
+
+            related_objects = item_response.body.get("related_objects", [])
+            variation_versions = {
+                obj["id"]: obj["version"]
+                for obj in related_objects if obj["type"] == "ITEM_VARIATION"
+            }
+
+            raw_variations = request.data.get("variations", [])
+            formatted_variations = [
+                {
+                    "type": "ITEM_VARIATION",
+                    "id": v["id"],
+                    "version": variation_versions.get(v["id"]),
+                    "item_variation_data": {
+                        "item_id": item_id,
+                        "name": v["name"],
+                        "pricing_type": "FIXED_PRICING",
+                        "price_money": v["price_money"]
+                    }
+                }
+                for v in raw_variations
+            ]
+
+            updated_item = {
+                "idempotency_key": str(uuid.uuid4()),
+                "object": {
+                    "type": "ITEM",
+                    "id": item_id,
+                    "version": latest_version,
+                    "item_data": {
+                        "name": request.data.get("name"),
+                        "description": request.data.get("description", ""),
+                        "variations": formatted_variations,
+                    }
+                }
+            }
+            
+            update_response = catalog_api.upsert_catalog_object(body=updated_item)
+
+            if update_response.is_success():
+                logger.info(f"Item {item_id} and its variations updated successfully.")
+                return Response({
+                    "message": f"Item {item_id} updated successfully.",
+                    "item": update_response.body
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.error(f"Failed to update item {item_id}: {update_response.errors}")
+                return Response({"error": update_response.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            logger.error(f"Square item update error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        

@@ -169,3 +169,31 @@ def exchange_code_for_token(code):
         return response.json()
     else:
         return {"error": f"Failed to exchange code for token: {response.status_code} - {response.text}"}
+
+def format_square_item(item):
+    """Format a Square catalog item for the API response."""
+    if not item or item.get("type") != "ITEM" or "item_data" not in item:
+        return None
+    
+    item_data = item["item_data"]
+    
+    variations = []
+    for variation in item_data.get("variations", []):
+        if "item_variation_data" in variation:
+            var_data = variation["item_variation_data"]
+            price_money = var_data.get("price_money", {})
+            variations.append({
+                "id": variation["id"],
+                "name": var_data.get("name", ""),
+                "price_money": price_money,
+            })
+
+    categories = [cat.get("id") for cat in item_data.get("categories", []) if "id" in cat]
+    
+    return {
+        "id": item["id"],
+        "name": item_data.get("name", ""),
+        "description": item_data.get("description", ""),
+        "variations": variations,
+        "categories": categories
+    }
