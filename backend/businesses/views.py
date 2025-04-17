@@ -345,16 +345,27 @@ class SquareViewSet(viewsets.ViewSet):
         try:
             catalog_api = client.catalog
 
-            item_response = catalog_api.retrieve_catalog_object(object_id=item_id, include_related_objects=True)
-            latest_version = item_response.body["object"]["version"]
-            logger.info(f"Latest version of item {item_id}: {latest_version}")
+            # Get the item details
+            item_response = catalog_api.retrieve_catalog_object(
+                object_id=item_id, 
+                include_related_objects=True
+            )
+            
+            if not item_response.is_success():
+                logger.error(f"Failed to retrieve item: {item_response.errors}")
+                return Response({"error": "Failed to retrieve item details"}, status=status.HTTP_400_BAD_REQUEST)
 
-            related_objects = item_response.body.get("related_objects", [])
+            current_item = item_response.body["object"]
+            latest_version = current_item["version"]
+            current_item_data = current_item.get("item_data", {})
+            
+            # Get variation versions
             variation_versions = {
-                obj["id"]: obj["version"]
-                for obj in related_objects if obj["type"] == "ITEM_VARIATION"
+                variation["id"]: variation["version"]
+                for variation in current_item_data.get("variations", [])
+                if "id" in variation and "version" in variation
             }
-
+            
             raw_variations = request.data.get("variations", [])
             formatted_variations = [
                 {
@@ -365,12 +376,15 @@ class SquareViewSet(viewsets.ViewSet):
                         "item_id": item_id,
                         "name": v["name"],
                         "pricing_type": "FIXED_PRICING",
-                        "price_money": v["price_money"]
+                        "price_money": v["price_money"],
+                        **{k:v for k,v in current_item_data.get("variations", [])[0].get("item_variation_data", {}).items() 
+                        if k not in ["name", "pricing_type", "price_money"]}
                     }
                 }
                 for v in raw_variations
             ]
 
+            # Prepare the updated item
             updated_item = {
                 "idempotency_key": str(uuid.uuid4()),
                 "object": {
@@ -378,24 +392,28 @@ class SquareViewSet(viewsets.ViewSet):
                     "id": item_id,
                     "version": latest_version,
                     "item_data": {
-                        "name": request.data.get("name"),
-                        "description": request.data.get("description", ""),
+                        **current_item_data,
+                        "name": request.data.get("name", current_item_data.get("name")),
+                        "description": request.data.get("description", current_item_data.get("description", "")),
                         "variations": formatted_variations,
                     }
                 }
             }
+            logger.debug(f"Update request: {updated_item}")
             
             update_response = catalog_api.upsert_catalog_object(body=updated_item)
-
             if update_response.is_success():
-                logger.info(f"Item {item_id} and its variations updated successfully.")
+                logger.info(f"Item {item_id} updated successfully")
                 return Response({
                     "message": f"Item {item_id} updated successfully.",
                     "item": update_response.body
                 }, status=status.HTTP_200_OK)
             else:
                 logger.error(f"Failed to update item {item_id}: {update_response.errors}")
-                return Response({"error": update_response.errors}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({
+                    "error": "Update failed", 
+                    "details": update_response.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
             logger.error(f"Square item update error: {e}")
