@@ -188,6 +188,8 @@ def fetch_and_save_square_sales_data(business):
     Args:
         business (Business): The business object for which to fetch sales data.
     """
+    method = 'orders' # 'payments' or 'orders'
+
     # Calculate the date range
     end_date = datetime.now(timezone('UTC')).isoformat()
     
@@ -204,48 +206,76 @@ def fetch_and_save_square_sales_data(business):
         logger.error("No Square location found.")
         return
     location_id = locations[0].get("id") if locations else None
-
-    # Square API endpoint for payments (sales data)
-    url = f"{settings.SQUARE_BASE_URL}/v2/payments"
     
     headers = {
         "Authorization": f"Bearer {business.square_access_token}",
         "Content-Type": "application/json"
     }
 
-    params = {
-        "begin_time": start_date,
-        "end_time": end_date,
-        "sort_field": "CREATED_AT",
-        "sort_order": "DESC",
-        "location_id": location_id,
-    }
-
-    response = requests.get(url, headers=headers, params=params)
+    if method == 'payments':
+        url = f"{settings.SQUARE_BASE_URL}/v2/payments"
+        params = {
+            "begin_time": start_date,
+            "end_time": end_date,
+            "sort_field": "CREATED_AT",
+            "sort_order": "DESC",
+            "location_id": location_id,
+        }
+        response = requests.get(url, headers=headers, params=params)
+    elif method == 'orders':
+        url = f"{settings.SQUARE_BASE_URL}/v2/orders/search"
+        body = {
+            "location_ids": [location_id],
+            "query": {
+                "filter": {
+                    "date_time_filter": {
+                        "created_at": {
+                            "start_at": start_date,
+                            "end_at": end_date
+                        }
+                    }
+                }
+            },
+            "sort": {
+                "sort_field": "CREATED_AT",
+                "sort_order": "DESC"
+            },
+            "limit": 1000 # Default: 500 Max: 1000
+        }
+        response = requests.post(url, headers=headers, json=body)
+    else:
+        raise Exception(f"Wrong method is selected: {method}")
 
     if response.status_code != 200:
         logger.error(f"Error fetching sales data: {response.status_code}, {response.text}")
         raise Exception(f"Square API error: {response.status_code}, {response.text}")
 
     sales_data = response.json()
-    logger.debug(f"Sales data fetched successfully: {sales_data}")
+    logger.info(f"Sales data fetched successfully: {sales_data}")
 
     if sales_data:
         # Prepare the sales data for saving
         business_timezone = timezone('Australia/Brisbane')
         daily_revenue = defaultdict(Decimal)
-        
-        for payment in sales_data['payments']:
-            payment_date = payment['created_at']
-            revenue = Decimal(payment['amount_money']['amount']) / Decimal(100)  # Convert cents to dollars
-            
-            # Parse the payment date into a datetime object (UTC)
-            payment_date_obj = datetime.strptime(payment_date, '%Y-%m-%dT%H:%M:%S.%fZ')
-            
-            # Convert to local time
-            payment_date_obj_local = payment_date_obj.astimezone(business_timezone).date()
-
-            daily_revenue[payment_date_obj_local] += revenue
+        if method == 'payments':
+            items = sales_data['payments']
+            for record in items:
+                date = record['created_at']
+                revenue = Decimal(record['amount_money']['amount']) / Decimal(100)
+                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
+                date_obj_local = date_obj.astimezone(business_timezone).date()
+                daily_revenue[date_obj_local] += revenue
+        elif method == 'orders':
+            items = sales_data['orders']
+            for record in items:
+                date = record['created_at']
+                money_info = record.get('total_money')
+                if not money_info:
+                    continue
+                revenue = Decimal(money_info['amount']) / Decimal(100)
+                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
+                date_obj_local = date_obj.astimezone(business_timezone).date()
+                daily_revenue[date_obj_local] += revenue
 
         logger.debug(f"Daily revenue calculated: {daily_revenue}")
         

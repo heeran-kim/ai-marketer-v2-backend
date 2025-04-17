@@ -205,7 +205,7 @@ class SquareViewSet(viewsets.ViewSet):
         auth_url = (
             f"{settings.SQUARE_BASE_URL}/oauth2/authorize"
             f"?client_id={auth_url_values['app_id']}"
-            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ+PAYMENTS_READ"
+            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ"
             f"&session=false&state={auth_url_values['state']}"
             f"&redirect_uri={auth_url_values['redirect_uri']}"
         )
