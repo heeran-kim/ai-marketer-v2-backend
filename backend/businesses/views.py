@@ -1,18 +1,20 @@
 # backend/businesses/views.py
+from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from config import settings
+from utils.square_api import exchange_code_for_token, get_auth_url_values, get_square_client, get_square_locations
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
-from social.serializers import SocialMediaSerializer
 from posts.models import Post
-from django.conf import settings
+import os
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -166,3 +168,100 @@ class BusinessDetailView(APIView):
         """Validate logo file size and type."""
         # Validation logic here...
         return True, None
+    
+
+class SquareViewSet(viewsets.ViewSet):
+    """
+    ViewSet for managing Square integration.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """Check if Square integration is connected for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        client = get_square_client(business)
+        if not client:
+            return Response({"square_connected": False, "business_name": None})
+        
+        locations = get_square_locations(client)
+        if not locations:
+            return Response({"square_connected": True, "business_name": None})
+        
+        return Response({
+            "square_connected": True,
+            "business_name": locations[0].get("name")
+        })
+
+    @action(detail=False, methods=['post'])
+    def connect(self, request):
+        """Connect Square integration for the authenticated user's business."""
+        auth_url_values = get_auth_url_values()
+        request.session['square_oauth_state'] = auth_url_values['state']
+
+        auth_url = (
+            f"{settings.SQUARE_BASE_URL}/oauth2/authorize"
+            f"?client_id={auth_url_values['app_id']}"
+            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ"
+            f"&session=false&state={auth_url_values['state']}"
+            f"&redirect_uri={auth_url_values['redirect_uri']}"
+        )
+        
+        return Response({"link": auth_url}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def callback(self, request):
+        """Create Square integration for the authenticated user's business."""
+        received_state = request.query_params.get('state')
+        saved_state = request.session.get('square_oauth_state')
+
+        # Ensure state matches and prevent CSRF
+        if not saved_state or received_state != saved_state:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=state_mismatch")        
+        error = request.query_params.get('error')
+        
+        # Handle error scenarios
+        if error:
+            error_description = request.query_params.get('error_description')
+            if ('access_denied' == error and 'user_denied' == error_description):
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=user_denied")
+            else:
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=${error}&error_description=${error_description}")
+            
+        # Get the authorization code
+        code = request.query_params.get('code')
+        if not code:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=missing_code")
+
+        # Exchange code for access token
+        token_response = exchange_code_for_token(code)
+        if 'access_token' not in token_response:
+            logger.info(f"Error: {token_response}")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=token_error")
+
+        # Save the access token to the business
+        access_token = token_response['access_token']
+        business = Business.objects.filter(owner=request.user).first()
+        business.square_access_token = access_token
+        business.save()
+        logger.info(f"Square access token: {access_token}")
+
+        # After successful connection, pop the state from the session
+        request.session.pop('square_oauth_state', None)
+        
+        return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?success=true")
+    
+    @action(detail=False, methods=['post'])
+    def disconnect(self, request):
+        """Disconnect Square integration for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Remove the access token and disconnect the business
+        business.square_access_token = None
+        business.save()
+        
+        return Response({"message": "Square integration deleted successfully"}, status=status.HTTP_200_OK)

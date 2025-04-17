@@ -16,6 +16,7 @@ class Business(models.Model):
     target_customers = models.CharField(max_length=32, blank=True, null=True)  # Store target customer
     vibe = models.CharField(max_length=32, blank=True, null=True)  # Store vibe or theme of the business
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="businesses")
+    square_access_token = models.CharField(max_length=255, blank=True, null=True)  # Store Square access token
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
