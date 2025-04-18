@@ -43,7 +43,7 @@ def get_square_client(business):
     if not access_token:
         logger.warning(f"No Square access token for business {business.id}")
         return None
-    return Client(access_token=access_token, environment="production")
+    return Client(access_token=access_token, environment=settings.SQUARE_ENV)
 
 def get_square_locations(client):
     """Fetch list of locations."""
