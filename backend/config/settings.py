@@ -213,7 +213,7 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
     "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
-    if os.getenv("USE_LOCAL_DB") == "false"
+    if os.getenv("USE_RENDER_DB") == "true"
     else {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("POSTGRES_DB"),
