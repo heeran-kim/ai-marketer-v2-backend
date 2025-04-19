@@ -88,8 +88,29 @@ class PostListCreateView(ListCreateAPIView):
         if not insta_account_data:
             return None #return error if no instagram account found
         return insta_account_data.get("id") #return the instagram account id
-        
+    
+    def crop_center_resize(self, image, target_width=1080, target_height=1350):
+        aspect_target = target_width / target_height
+        width, height = image.size
+        aspect_original = width / height
 
+        # Crop to match aspect ratio
+        if aspect_original > aspect_target:
+            # Too wide — crop sides
+            new_width = int(height * aspect_target)
+            left = (width - new_width) // 2
+            right = left + new_width
+            top, bottom = 0, height
+        else:
+            # Too tall — crop top/bottom
+            new_height = int(width / aspect_target)
+            top = (height - new_height) // 2
+            bottom = top + new_height
+            left, right = 0, width
+
+        cropped = image.crop((left, top, right, bottom))
+        resized = cropped.resize((target_width, target_height), Image.LANCZOS)
+        return resized
     
     def publishToMeta(self, platform, caption, image_file, user):
         f = Fernet(TWOFA_ENCRYPTION_KEY) 
@@ -109,9 +130,9 @@ class PostListCreateView(ListCreateAPIView):
         headers = {
             'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
         }
-        image_file.file.seek(0)
+        #image_file.file.seek(0)
         img = Image.open(image_file)
-        img = img.resize((1080, 1350))  # 4:5 portrait
+        img = self.crop_center_resize(img) # 4:5 portrait
         # Save to in-memory buffer
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG')
@@ -128,15 +149,22 @@ class PostListCreateView(ListCreateAPIView):
         alt_text="This is the alt text for the image"
 
         #Create media object
-        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media?image_url={image_url}&caption={caption}&alt_text={alt_text}&access_token={token_decoded}'
-        response = requests.post(url)
+        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media'
+        data = {
+            "image_url": image_url,
+            "caption": caption,
+            "alt_text": alt_text,
+            "access_token": token_decoded
+        }
+        response = requests.post(url, data=data)
         if response.status_code != 200:
             # Handle error response
-            return {"error": f"Unable to create Media Obj | text:{response.text} link:{image_url}", "status": False}
+            return {"error": f"Unable to create Media Obj | text:{response.text} link:{image_url} caption={caption}", "status": False}
         media_data = response.json()
         if not media_data.get("id"):
             return {"error": "Unable to retrieve media ID", "status": False}
         media_id = media_data.get("id")
+
         #Publish the media object
         url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media_publish?creation_id={media_id}&access_token={token_decoded}'
         response = requests.post(url)
