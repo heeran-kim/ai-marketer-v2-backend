@@ -112,7 +112,7 @@ class PostListCreateView(ListCreateAPIView):
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
         return resized
     
-    def publishToMeta(self, platform, caption, image_file, user):
+    def publishToMeta(self, platform, caption, image_file, user,aspectRatio):
         f = Fernet(TWOFA_ENCRYPTION_KEY) 
         token=user.access_token[1:]  #do 1: to not include byte identifier
         token_decrypted=f.decrypt(token)
@@ -132,7 +132,10 @@ class PostListCreateView(ListCreateAPIView):
         }
         #image_file.file.seek(0)
         img = Image.open(image_file)
-        img = self.crop_center_resize(img) # 4:5 portrait
+        if(aspectRatio == "1/1"):
+            img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
+        else:
+            img = self.crop_center_resize(img) # 4:5 portrait
         # Save to in-memory buffer
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG')
@@ -298,7 +301,7 @@ class PostListCreateView(ListCreateAPIView):
             case 'facebook':
                 return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
             case 'instagram':
-                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user)
+                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"))
                 if (response.get("status") == False):
                     return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
                 # post.link = f'https://www.instagram.com/p/{response.get("message")}/'
