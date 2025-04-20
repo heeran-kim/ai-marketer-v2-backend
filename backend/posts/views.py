@@ -18,6 +18,8 @@ import requests
 import os
 from PIL import Image
 import io
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet #cryptography package
 
@@ -112,7 +114,7 @@ class PostListCreateView(ListCreateAPIView):
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
         return resized
     
-    def publishToMeta(self, platform, caption, image_file, user,aspectRatio):
+    def publishToMeta(self, platform, caption, image_file, user,aspectRatio,scheduled_at=None):
         f = Fernet(TWOFA_ENCRYPTION_KEY) 
         token=user.access_token[1:]  #do 1: to not include byte identifier
         token_decrypted=f.decrypt(token)
@@ -151,6 +153,46 @@ class PostListCreateView(ListCreateAPIView):
         image_url = response.json()['data']['link']
         alt_text="This is the alt text for the image"
 
+        #For Facebook
+        if platform == 'facebook':
+            #Get page access token
+            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+            metasData = response.json()
+            if not metasData.get("data"):
+                return {"error": "Unable to retrieve page access token 2", "status": False}
+            #Get the page access token
+            page_access_token = metasData.get("data")[0]["access_token"]
+            # Create media object for Facebook
+            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/photos'
+            data = {
+                "url": image_url,
+                "message": caption,
+                "access_token": page_access_token
+            }
+            # if scheduled_at:
+            #     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+            #     unix_timestamp = int(dt.timestamp())
+            #     data.update({"published": 'false',"scheduled_publish_time": unix_timestamp})
+
+            response = requests.post(url, data=data)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to create Media Obj for Facebook. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("id"):
+                return {"error": "Unable to retrieve media ID", "status": False}
+            media_id = media_data.get("id")
+
+            if scheduled_at:
+                return {"message": f'{media_id}', "status": True}
+            
+            return {"message": f'{media_id}', "status": True}
+
+        #For Instagram
         #Create media object
         url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media'
         data = {
@@ -159,14 +201,23 @@ class PostListCreateView(ListCreateAPIView):
             "alt_text": alt_text,
             "access_token": token_decoded
         }
+
+        # if scheduled_at:
+        #     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+        #     unix_timestamp = int(dt.timestamp())
+        #     data.update({"publish_at": unix_timestamp})
+
         response = requests.post(url, data=data)
         if response.status_code != 200:
             # Handle error response
-            return {"error": f"Unable to create Media Obj | text:{response.text} link:{image_url} caption={caption}", "status": False}
+            return {"error": f"Unable to create Media Obj.", "status": False}
         media_data = response.json()
         if not media_data.get("id"):
             return {"error": "Unable to retrieve media ID", "status": False}
         media_id = media_data.get("id")
+
+        if scheduled_at:
+            return {"message": f'{media_id}', "status": True}
 
         #Publish the media object
         url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media_publish?creation_id={media_id}&access_token={token_decoded}'
@@ -294,11 +345,16 @@ class PostListCreateView(ListCreateAPIView):
             link = "test.com"
             post_status = "Published"
 
+        # return Response({"error": scheduled_at}, status=status.HTTP_400_BAD_REQUEST)
+
         match data["platform"]:
             case 'facebook':
-                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+                response = self.publishToMeta('facebook',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
+                if (response.get("status") == False):
+                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                #return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
             case 'instagram':
-                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"))
+                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
                 if (response.get("status") == False):
                     return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
                 link=response.get("message")
