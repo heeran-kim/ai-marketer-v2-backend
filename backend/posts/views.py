@@ -94,15 +94,15 @@ class PostListCreateView(ListCreateAPIView):
         width, height = image.size
         aspect_original = width / height
 
-        # Crop to match aspect ratio
+        #Crop to match aspect ratio
         if aspect_original > aspect_target:
-            # Too wide — crop sides
+            #If too wide — crop sides
             new_width = int(height * aspect_target)
             left = (width - new_width) // 2
             right = left + new_width
             top, bottom = 0, height
         else:
-            # Too tall — crop top/bottom
+            #If too tall — crop top/bottom
             new_height = int(width / aspect_target)
             top = (height - new_height) // 2
             bottom = top + new_height
@@ -120,7 +120,7 @@ class PostListCreateView(ListCreateAPIView):
 
         facebookPageID=self.get_facebook_page_id(token_decoded)
         if not facebookPageID:
-            return {"error": "Unable to retrieve Facebook Page ID", "status": False}
+            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
         # Get the Instagram account ID
         instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
         if not instagram_account_id:    
@@ -178,8 +178,18 @@ class PostListCreateView(ListCreateAPIView):
         if not publish_data.get("id"):
             return {"error": "Unable to retrieve publish ID", "status": False}
         post_id = publish_data.get("id")
+        #Get the link to the post
+        url = f'https://graph.facebook.com/v22.0/{post_id}?fields=permalink&access_token={token_decoded}'
+        response = requests.get(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": "Unable to get post url", "status": False}
+        post_data = response.json()
+        if not post_data.get("permalink"):
+            return {"error": "Unable to retrieve post url from json", "status": False}
+        post_url = post_data.get("permalink")
         # Return the post ID
-        return {"message": {post_id}, "status": True}
+        return {"message": post_url, "status": True}
 
 
     def create(self, request, *args, **kwargs):
@@ -284,7 +294,21 @@ class PostListCreateView(ListCreateAPIView):
             link = "test.com"
             post_status = "Published"
 
+        match data["platform"]:
+            case 'facebook':
+                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+            case 'instagram':
+                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"))
+                if (response.get("status") == False):
+                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                link=response.get("message")
+            case 'twitter':
+                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+            case _:
+                return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
         
+
+        #Now create post object on backend here if successfully published/scheduled
         post = Post.objects.create(
             business=business,
             platform=platform,
@@ -296,22 +320,7 @@ class PostListCreateView(ListCreateAPIView):
             status=post_status,
             promotion=promotion
         )
-
-        match data["platform"]:
-            case 'facebook':
-                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
-            case 'instagram':
-                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"))
-                if (response.get("status") == False):
-                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
-                # post.link = f'https://www.instagram.com/p/{response.get("message")}/'
-                # post.save()
-            case 'twitter':
-                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
-            case _:
-                return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # return Response({"message": "Post not created successfully!"}, status=status.HTTP_400_BAD_REQUEST)
+                
         categories_data = json.loads(data.get("categories", "[]"))
         categories = Category.objects.filter(id__in=categories_data)
         post.categories.set(categories)
