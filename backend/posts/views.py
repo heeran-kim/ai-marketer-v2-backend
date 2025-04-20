@@ -183,14 +183,25 @@ class PostListCreateView(ListCreateAPIView):
                 # Handle error response
                 return {"error": f"Unable to create Media Obj for Facebook. {response.text}", "status": False}
             media_data = response.json()
-            if not media_data.get("id"):
-                return {"error": "Unable to retrieve media ID", "status": False}
-            media_id = media_data.get("id")
+            if not media_data.get("post_id"):
+                return {"error": "Unable to retrieve post ID", "status": False}
+            post_id = media_data.get("post_id")
 
             if scheduled_at:
-                return {"message": f'{media_id}', "status": True}
+                return {"message": f'{post_id}', "status": True}
+
+            #Get URL to the post
+            url = f'https://graph.facebook.com/v22.0/{post_id}?fields=permalink_url&access_token={page_access_token}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": "Unable to get post url", "status": False}
+            post_data = response.json()
+            if not post_data.get("permalink_url"):
+                return {"error": "Unable to retrieve post url from json", "status": False}
+            post_url = post_data.get("permalink_url")
             
-            return {"message": f'{media_id}', "status": True}
+            return {"message": post_url, "status": True}
 
         #For Instagram
         #Create media object
@@ -352,6 +363,7 @@ class PostListCreateView(ListCreateAPIView):
                 response = self.publishToMeta('facebook',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
                 if (response.get("status") == False):
                     return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                link=response.get("message")
                 #return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
             case 'instagram':
                 response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
