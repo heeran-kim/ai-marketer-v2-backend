@@ -4,7 +4,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Sum
 
+from utils.square_api import fetch_and_save_square_sales_data
 from businesses.models import Business
 from .models import SalesData, SalesDataPoint
 from .serializers import SalesDataSerializer
@@ -31,15 +33,22 @@ class SalesDataView(APIView):
         if not business:
             return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        data_points = SalesDataPoint.objects.filter(business=business).order_by('date')
+        # Group by date and sum the revenue for each date
+        data_points = SalesDataPoint.objects.filter(business=business) \
+        .values('date') \
+        .annotate(total_revenue=Sum('revenue')) \
+        .order_by('date')
         
         if not data_points.exists():
             return Response({"labels": [], "datasets": []})
-
-        labels = [entry.date.strftime('%d-%m-%Y') for entry in data_points]
-        values = [float(entry.revenue) for entry in data_points]
         
+        logger.debug(f"📊 Sales data fetched successfully:{data_points}")
+
+        labels = [entry['date'].strftime('%d-%m-%Y') for entry in data_points]
+        values = [float(entry['total_revenue']) for entry in data_points]
+
         return Response({
+            "square_connected": bool(business.square_access_token),
             "labels": labels,
             "datasets": [{
                 "label": "Sales",
@@ -99,7 +108,8 @@ class SalesDataView(APIView):
                     defaults={
                         'revenue': revenue,
                         'source_file': sales_data
-                    }
+                    },
+                    source='upload'
                 )
             return Response({"success": True}, status=status.HTTP_201_CREATED)
         
@@ -110,3 +120,17 @@ class SalesDataView(APIView):
         except Exception as e:
             logger.error("❌ CSV upload failed — %s", str(e), exc_info=True)
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class RefreshSalesDataView(APIView):
+    def post(self, request):
+        """Refresh sales data from Square API"""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            fetch_and_save_square_sales_data(business)
+            return Response({"success": True}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error("❌ Refresh sales data failed — %s", str(e), exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

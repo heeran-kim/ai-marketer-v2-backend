@@ -35,3 +35,36 @@ class BusinessSerializer(serializers.ModelSerializer):
         if value and len(value) > 32:
             raise serializers.ValidationError("Vibe description cannot exceed 32 characters.")
         return value
+    
+class SquareItemVariationSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    price_cents = serializers.IntegerField()
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['formatted_price'] = f"{data['price_cents'] / 100:.2f}"
+        return data
+
+class SquareItemSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    description = serializers.CharField(required=False, allow_blank=True)
+    variations = SquareItemVariationSerializer(many=True)
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        
+        variations_text = []
+        for variation in data["variations"]:
+            name = variation.get("name", "")
+            price = variation.get("formatted_price", "")
+            if name and price:
+                variations_text.append(f"{name} ${price}")
+        
+        price_description = f"[{', '.join(variations_text)}]"
+        data['description_with_price'] = (
+            f"{price_description} {data['description']}" 
+            if data['description'] else price_description
+        )
+        
+        return data
+    

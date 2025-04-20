@@ -12,7 +12,7 @@ from businesses.models import Business
 from social.models import SocialMedia
 from posts.models import Post, Category
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
-from utils.square_api import check_square_integration
+from utils.square_api import get_square_summary
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,15 +91,13 @@ class PostListCreateView(ListCreateAPIView):
             ]
 
             square_integration_status = {
-                "hasPOSIntegration": False,
-                "hasSalesData": False,
-                "hasItemsInfo": False,
+                "square_connected": False,
                 "items": [],
                 }
             
             logger.debug(f"Checking Square integration for business: {business.id}")
             try: 
-                square_integration_status = check_square_integration(business)
+                square_integration_status = get_square_summary(business)
                 logger.debug(f"Square integration status: {square_integration_status}")
             except Exception as e:
                 logger.error(f"Error checking Square integration: {e}")
@@ -108,9 +106,7 @@ class PostListCreateView(ListCreateAPIView):
                 "business": {
                     "target_customers": business.target_customers,
                     "vibe": business.vibe,
-                    "hasPOSIntegration": square_integration_status["hasPOSIntegration"],
-                    "hasItemsInfo": square_integration_status["hasItemsInfo"],
-                    "hasSalesData": square_integration_status["hasSalesData"],
+                    "square_connected": square_integration_status["square_connected"],
                     "items": square_integration_status["items"],
                 },
                 "selectable_categories": selectable_categories,

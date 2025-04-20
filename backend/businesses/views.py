@@ -1,18 +1,21 @@
 # backend/businesses/views.py
+from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from sales.models import SalesDataPoint
+from config import settings
+from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, format_square_item
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
-from social.serializers import SocialMediaSerializer
 from posts.models import Post
-from django.conf import settings
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -166,3 +169,253 @@ class BusinessDetailView(APIView):
         """Validate logo file size and type."""
         # Validation logic here...
         return True, None
+    
+
+class SquareViewSet(viewsets.ViewSet):
+    """
+    ViewSet for managing Square integration.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """Check if Square integration is connected for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        client = get_square_client(business)
+        if not client:
+            return Response({"square_connected": False, "business_name": None})
+        
+        locations = get_square_locations(client)
+        if not locations:
+            return Response({"square_connected": True, "business_name": None})
+        
+        return Response({
+            "square_connected": True,
+            "business_name": locations[0].get("name")
+        })
+
+    @action(detail=False, methods=['post'])
+    def connect(self, request):
+        """Connect Square integration for the authenticated user's business."""
+        auth_url_values = get_auth_url_values()
+        request.session['square_oauth_state'] = auth_url_values['state']
+
+        auth_url = (
+            f"{settings.SQUARE_BASE_URL}/oauth2/authorize"
+            f"?client_id={auth_url_values['app_id']}"
+            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ"
+            f"&session=false&state={auth_url_values['state']}"
+            f"&redirect_uri={auth_url_values['redirect_uri']}"
+        )
+        
+        return Response({"link": auth_url}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def callback(self, request):
+        """Create Square integration for the authenticated user's business."""
+        received_state = request.query_params.get('state')
+        saved_state = request.session.get('square_oauth_state')
+
+        # Ensure state matches and prevent CSRF
+        if not saved_state or received_state != saved_state:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=state_mismatch")        
+        error = request.query_params.get('error')
+        
+        # Handle error scenarios
+        if error:
+            error_description = request.query_params.get('error_description')
+            if ('access_denied' == error and 'user_denied' == error_description):
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=user_denied")
+            else:
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=${error}&error_description=${error_description}")
+            
+        # Get the authorization code
+        code = request.query_params.get('code')
+        if not code:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=missing_code")
+
+        # Exchange code for access token
+        token_response = exchange_code_for_token(code)
+        if 'access_token' not in token_response:
+            logger.info(f"Error: {token_response}")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=token_error")
+
+        # Save the access token to the business
+        access_token = token_response['access_token']
+        business = Business.objects.filter(owner=request.user).first()
+        business.square_access_token = access_token
+        business.save()
+        logger.info(f"Square access token: {access_token}")
+
+        # After saving access token, fetch and save the sales data
+        fetch_and_save_square_sales_data(business)
+
+        # After successful connection, pop the state from the session
+        request.session.pop('square_oauth_state', None)
+        
+        return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?success=true")
+    
+    @action(detail=False, methods=['post'])
+    def disconnect(self, request):
+        """Disconnect Square integration for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Remove the access token and disconnect the business
+        business.square_access_token = None
+        business.last_square_sync_at = None
+        business.save()
+
+        # Delete Square-originated sales data points
+        SalesDataPoint.objects.filter(business=business, source="square").delete()
+        
+        return Response({"message": "Square integration deleted successfully"}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'], url_path='items')
+    def list_items(self, request):
+        """Retrieve items from Square for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        client = get_square_client(business)
+        if not client:
+            return Response({
+                "square_connected": False,
+                "items": [],
+                "categories": []
+            }, status=status.HTTP_200_OK)
+
+        try:
+            # Get catalog items
+            catalog_api = client.catalog
+            
+            # Get categories
+            categories_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["CATEGORY"]
+            )
+            
+            categories = []
+            if categories_response.is_success():
+                for obj in categories_response.body.get("objects", []):
+                    if obj.get("type") == "CATEGORY" and "category_data" in obj:
+                        categories.append({
+                            "id": obj["id"],
+                            "name": obj["category_data"]["name"]
+                        })
+            
+            # Get items
+            items_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["ITEM"]
+            )
+
+            items = []
+            if items_response.is_success():
+                for obj in items_response.body.get("objects", []):
+                    item = format_square_item(obj)
+                    if item:
+                        items.append(item)
+            
+            return Response({
+                "square_connected": True,
+                "items": items,
+                "categories": categories
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Square items fetch error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'], url_path='items/(?P<item_id>[^/.]+)')
+    def update_item(self, request, item_id=None):
+        """Update a menu item in Square."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        client = get_square_client(business)
+        if not client:
+            return Response({"error": "Square not connected"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            catalog_api = client.catalog
+
+            # Get the item details
+            item_response = catalog_api.retrieve_catalog_object(
+                object_id=item_id, 
+                include_related_objects=True
+            )
+            
+            if not item_response.is_success():
+                logger.error(f"Failed to retrieve item: {item_response.errors}")
+                return Response({"error": "Failed to retrieve item details"}, status=status.HTTP_400_BAD_REQUEST)
+
+            current_item = item_response.body["object"]
+            latest_version = current_item["version"]
+            current_item_data = current_item.get("item_data", {})
+            
+            # Get variation versions
+            variation_versions = {
+                variation["id"]: variation["version"]
+                for variation in current_item_data.get("variations", [])
+                if "id" in variation and "version" in variation
+            }
+            
+            raw_variations = request.data.get("variations", [])
+            formatted_variations = [
+                {
+                    "type": "ITEM_VARIATION",
+                    "id": v["id"],
+                    "version": variation_versions.get(v["id"]),
+                    "item_variation_data": {
+                        "item_id": item_id,
+                        "name": v["name"],
+                        "pricing_type": "FIXED_PRICING",
+                        "price_money": v["price_money"],
+                        **{k:v for k,v in current_item_data.get("variations", [])[0].get("item_variation_data", {}).items() 
+                        if k not in ["name", "pricing_type", "price_money"]}
+                    }
+                }
+                for v in raw_variations
+            ]
+
+            # Prepare the updated item
+            updated_item = {
+                "idempotency_key": str(uuid.uuid4()),
+                "object": {
+                    "type": "ITEM",
+                    "id": item_id,
+                    "version": latest_version,
+                    "item_data": {
+                        **current_item_data,
+                        "name": request.data.get("name", current_item_data.get("name")),
+                        "description": request.data.get("description", current_item_data.get("description", "")),
+                        "variations": formatted_variations,
+                    }
+                }
+            }
+            logger.debug(f"Update request: {updated_item}")
+            
+            update_response = catalog_api.upsert_catalog_object(body=updated_item)
+            if update_response.is_success():
+                logger.info(f"Item {item_id} updated successfully")
+                return Response({
+                    "message": f"Item {item_id} updated successfully.",
+                    "item": update_response.body
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.error(f"Failed to update item {item_id}: {update_response.errors}")
+                return Response({
+                    "error": "Update failed", 
+                    "details": update_response.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            logger.error(f"Square item update error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
