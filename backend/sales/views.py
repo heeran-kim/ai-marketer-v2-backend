@@ -9,7 +9,6 @@ from django.db.models import Sum
 from utils.square_api import fetch_and_save_square_sales_data
 from businesses.models import Business
 from .models import SalesData, SalesDataPoint
-from .serializers import SalesDataSerializer
 
 import os
 import pandas as pd
@@ -107,7 +106,7 @@ class SalesDataView(APIView):
                     date=date,
                     defaults={
                         'revenue': revenue,
-                        'source_file': sales_data
+                        'source_file': sales_data # TODO: processed, processed_at
                     },
                     source='upload'
                 )
