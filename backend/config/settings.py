@@ -48,6 +48,30 @@ FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
 if not FACEBOOK_REDIRECT_URI:
     raise ValueError("FACEBOOK_REDIRECT_URI environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
 
+SQUARE_ENV = os.getenv("SQUARE_ENV", "sandbox")
+if SQUARE_ENV == "sandbox":
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_SANDBOX")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_SANDBOX")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_SANDBOX")
+else:
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_PROD")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_PROD")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_PROD")
+
+if not SQUARE_APP_ID:
+    raise ValueError("SQUARE_APP_ID environment variable is not set.")
+
+if not SQUARE_APP_SECRET:
+    raise ValueError("SQUARE_APP_SECRET environment variable is not set.")
+
+SQUARE_REDIRECT_URI = os.getenv("SQUARE_REDIRECT_URI")
+if not SQUARE_REDIRECT_URI:
+    raise ValueError("SQUARE_REDIRECT_URI environment variable is not set.")
+
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL")
+if not FRONTEND_BASE_URL:
+    raise ValueError("FRONTEND_BASE_URL environment variable is not set.")
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -95,6 +119,7 @@ SIMPLE_JWT = {
 }
 
 SESSION_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
+SESSION_COOKIE_SAMESITE = "None"
 
 # CSRF Settings
 CSRF_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
