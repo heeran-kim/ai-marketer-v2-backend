@@ -46,7 +46,7 @@ class PostListCreateView(ListCreateAPIView):
         if not instagram_account_id:    
             return {"error": "Unable to retrieve Insta ID", "status": False}
         #Send request to Meta API to get posts
-        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media?fields=id,caption,media_type,media_url,timestamp,permalink,thumbnail_url,children&access_token={token_decoded}'
+        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media?fields=id,caption,media_type,media_url,timestamp,permalink,thumbnail_url,children,like_count,comments&access_token={token_decoded}'
         response = requests.get(url)
         if response.status_code != 200:
             # Handle error response
@@ -66,7 +66,7 @@ class PostListCreateView(ListCreateAPIView):
                 f.write(response.content)
             return save_path
         else:
-            return "/app/media/business_posts/1/easter-holiday.jpg"
+            return "/app/media/No_Image_Available.jpg"
 
     def get_queryset(self):
         business = Business.objects.filter(owner=self.request.user).first()
@@ -86,6 +86,9 @@ class PostListCreateView(ListCreateAPIView):
                 continue
             # Create a new Post object
             file_path= self.save_meta_image(post_data.get('media_url'),f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg") if post_data.get("media_type") == "IMAGE" else "/app/media/No_Image_Available.jpg"
+            comments= post_data.get("comments", 0)
+            comment_count=len(post_data.get("comments").get("data")) if comments else 0
+
             with open(file_path, 'rb') as f:
                 django_file = File(f)
                 post = Post(
@@ -97,7 +100,9 @@ class PostListCreateView(ListCreateAPIView):
                     image=django_file,
                     scheduled_at=None,
                     status='Published',
-                    promotion=None
+                    promotion=None,
+                    reactions=post_data.get("like_count", 0),
+                    comments=comment_count
                 )
                 # Save the post to the database
                 post.save()
