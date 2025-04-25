@@ -5,7 +5,6 @@ from square.client import Client
 from datetime import datetime, timedelta
 from pytz import timezone
 from django.db import transaction 
-from collections import defaultdict
 from decimal import Decimal
 import base64
 import secrets
@@ -185,15 +184,16 @@ def format_square_item(item):
 def fetch_and_save_square_sales_data(business):
     """
     Fetch sales data from Square API and save it to the database.
+    If this is the first sync, also updates existing product IDs to match Square catalog IDs.
+    
     Args:
         business (Business): The business object for which to fetch sales data.
     """
-    method = 'orders' # 'payments' or 'orders'
-
+    is_initial_sync = business.last_square_sync_at is None
+    
     # Calculate the date range
     end_date = datetime.now(timezone('UTC')).isoformat()
     
-    # Check if last_square_sync_at is set, otherwise default to 30 days ago
     if business.last_square_sync_at:
         start_date = business.last_square_sync_at.isoformat()
     else:
@@ -212,39 +212,83 @@ def fetch_and_save_square_sales_data(business):
         "Content-Type": "application/json"
     }
 
-    if method == 'payments':
-        url = f"{settings.SQUARE_BASE_URL}/v2/payments"
-        params = {
-            "begin_time": start_date,
-            "end_time": end_date,
-            "sort_field": "CREATED_AT",
-            "sort_order": "DESC",
-            "location_id": location_id,
-        }
-        response = requests.get(url, headers=headers, params=params)
-    elif method == 'orders':
-        url = f"{settings.SQUARE_BASE_URL}/v2/orders/search"
-        body = {
-            "location_ids": [location_id],
-            "query": {
-                "filter": {
-                    "date_time_filter": {
-                        "created_at": {
-                            "start_at": start_date,
-                            "end_at": end_date
+    # Get the catalog items for mapping IDs to names
+    catalog_data = {}
+    product_name_to_id_map = {}
+    
+    try:
+        catalog_api = client.catalog
+        
+        # Get all catalog items
+        catalog_response = catalog_api.list_catalog(
+            cursor=None,
+            types=["ITEM", "ITEM_VARIATION"]
+        )
+        
+        if catalog_response.is_success():
+            # Extract all items
+            for obj in catalog_response.body.get("objects", []):
+                if obj.get("type") == "ITEM" and "item_data" in obj:
+                    item_data = obj["item_data"]
+                    item_id = obj["id"]
+                    item_name = item_data.get("name", "Unknown Item")
+                    
+                    catalog_data[item_id] = {
+                        "name": item_name,
+                        "variations": {}
+                    }
+
+                    normalized_name = item_name.strip().lower()
+                    product_name_to_id_map[normalized_name] = item_id
+                    
+                    logger.debug(f"Catalog item: ID={item_id}, Name={item_data.get('name', 'Unknown Item')}")
+            
+            # Extract all variations and link them to parent items
+            for obj in catalog_response.body.get("objects", []):
+                if obj.get("type") == "ITEM_VARIATION" and "item_variation_data" in obj:
+                    var_data = obj["item_variation_data"]
+                    variation_id = obj["id"]
+                    item_id = var_data.get("item_id")
+                    
+                    if item_id and item_id in catalog_data:
+                        catalog_data[item_id]["variations"][variation_id] = {
+                            "name": var_data.get("name", "Default Variation"),
+                            "price": var_data.get("price_money", {}).get("amount", 0)
                         }
+                        logger.debug(f"Variation: ID={variation_id}, Name={var_data.get('name', 'Default')}, Parent={item_id}")
+            
+            if is_initial_sync:
+                _update_product_ids_with_square(business, product_name_to_id_map)
+            
+        else:
+            logger.error(f"Failed to fetch catalog items: {catalog_response.errors}")
+    except Exception as e:
+        logger.error(f"Error fetching catalog items: {e}")
+        # Continue without catalog data
+    
+    logger.info(f"Retrieved {len(catalog_data)} catalog items")
+    
+    # Fetch order data
+    url = f"{settings.SQUARE_BASE_URL}/v2/orders/search"
+    body = {
+        "location_ids": [location_id],
+        "query": {
+            "filter": {
+                "date_time_filter": {
+                    "created_at": {
+                        "start_at": start_date,
+                        "end_at": end_date
                     }
                 }
-            },
-            "sort": {
-                "sort_field": "CREATED_AT",
-                "sort_order": "DESC"
-            },
-            "limit": 1000 # Default: 500 Max: 1000
-        }
-        response = requests.post(url, headers=headers, json=body)
-    else:
-        raise Exception(f"Wrong method is selected: {method}")
+            }
+        },
+        "sort": {
+            "sort_field": "CREATED_AT",
+            "sort_order": "DESC"
+        },
+        "limit": 1000  # Default: 500 Max: 1000
+    }
+    response = requests.post(url, headers=headers, json=body)
 
     if response.status_code != 200:
         logger.error(f"Error fetching sales data: {response.status_code}, {response.text}")
@@ -256,59 +300,144 @@ def fetch_and_save_square_sales_data(business):
     if sales_data:
         # Prepare the sales data for saving
         business_timezone = timezone('Australia/Brisbane')
-        daily_revenue = defaultdict(Decimal)
-        if method == 'payments':
-            items = sales_data['payments']
-            for record in items:
-                date = record['created_at']
-                revenue = Decimal(record['amount_money']['amount']) / Decimal(100)
-                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-                date_obj_local = date_obj.astimezone(business_timezone).date()
-                daily_revenue[date_obj_local] += revenue
-        elif method == 'orders':
-            items = sales_data['orders']
-            for record in items:
-                date = record['created_at']
-                money_info = record.get('total_money')
-                if not money_info:
-                    continue
-                revenue = Decimal(money_info['amount']) / Decimal(100)
-                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-                date_obj_local = date_obj.astimezone(business_timezone).date()
-                daily_revenue[date_obj_local] += revenue
-
-        logger.debug(f"Daily revenue calculated: {daily_revenue}")
         
-        # Prepare the sales data points for saving or updating
+        # Process order data
         sales_points = []
-        for day, amount in daily_revenue.items():
-            # Check if the sales data point already exists
-            existing_point = SalesDataPoint.objects.filter(
-                business=business, date=day, source='square'
-            ).first()
-
-            if existing_point:
-                # Update the existing record
-                existing_point.revenue += amount
-                sales_points.append(existing_point)
-            else:
-                # Create a new record
-                sales_points.append(SalesDataPoint(business=business, date=day, revenue=amount, source='square'))
-
-        logger.debug(f"Prepared {sales_points} sales data points for saving.")
+        
+        # For logging/debug only
+        unknown_variations = set()
+        matched_variations = 0
+        
+        items = sales_data.get('orders', [])
+        logger.info(f"Processing {len(items)} orders")
+        
+        for order in items:
+            # Skip orders with no line items
+            if not order.get('line_items'):
+                continue
+            
+            order_date = order.get('created_at')
+            date_obj = datetime.strptime(order_date, '%Y-%m-%dT%H:%M:%S.%fZ')
+            date_obj_local = date_obj.astimezone(business_timezone).date()
+            
+            for line_item in order.get('line_items', []):
+                catalog_object_id = line_item.get('catalog_object_id')
+                variation_id = catalog_object_id
+                
+                if not variation_id:
+                    # Skip items without catalog ID
+                    continue
+                
+                # Find the parent item for this variation
+                parent_item_id = None
+                parent_item_name = None
+                
+                # First, check if this ID is directly a catalog item
+                if variation_id in catalog_data:
+                    parent_item_id = variation_id
+                    parent_item_name = catalog_data[variation_id]["name"]
+                else:
+                    # Otherwise, look for it as a variation of a catalog item
+                    for item_id, item_data in catalog_data.items():
+                        if variation_id in item_data["variations"]:
+                            parent_item_id = item_id
+                            parent_item_name = item_data["name"]
+                            matched_variations += 1
+                            break
+                
+                # If we still don't have a name, use the line item name
+                if not parent_item_name:
+                    unknown_variations.add(variation_id)
+                    parent_item_name = line_item.get('name', 'Unknown Product')
+                
+                quantity = int(line_item.get('quantity', 1))
+                
+                # Get the price from the line item
+                base_price_money = line_item.get('base_price_money', {})
+                price_amount = base_price_money.get('amount', 0)
+                
+                # Convert to decimal
+                price = Decimal(price_amount) / Decimal(100)
+                revenue = price * quantity
+                
+                # Skip items with zero revenue
+                if revenue <= 0:
+                    continue
+                
+                product_id = parent_item_id or variation_id
+                
+                # Look for existing data point to update
+                existing = SalesDataPoint.objects.filter(
+                    business=business,
+                    date=date_obj_local,
+                    product_id=product_id,
+                    product_price=price,
+                    source='square'
+                ).first()
+                
+                if existing:
+                    # Update existing record
+                    existing.units_sold += quantity
+                    existing.revenue = existing.revenue + revenue
+                    if not existing.product_name or existing.product_name == "Unknown Product":
+                        existing.product_name = parent_item_name
+                    sales_points.append(existing)
+                else:
+                    # Create new record
+                    sales_point = SalesDataPoint(
+                        business=business,
+                        date=date_obj_local,
+                        product_id=product_id,
+                        product_name=parent_item_name,
+                        product_price=price,
+                        units_sold=quantity,
+                        revenue=revenue,
+                        source='square'
+                    )
+                    sales_points.append(sales_point)
 
         # Save the sales data to the database within a transaction
         if sales_points:
             with transaction.atomic():
                 # Bulk create or update
                 SalesDataPoint.objects.bulk_update(
-                    [point for point in sales_points if point.pk is not None], ['revenue']
+                    [point for point in sales_points if point.pk is not None], 
+                    ['units_sold', 'revenue', 'product_name']
                 )
                 SalesDataPoint.objects.bulk_create(
                     [point for point in sales_points if point.pk is None]
                 )
-                logger.debug(f"Saved {len(sales_points)} sales data points to the database.")
+                logger.debug(f"Saved {len(sales_points)} sales data points to the database")
     
     business.last_square_sync_at = datetime.now(timezone('UTC'))
     business.save()
     logger.debug(f"Updated last_square_sync_at for business {business.id} to {business.last_square_sync_at}")
+
+def _update_product_ids_with_square(business, product_name_to_id_map):
+    """
+    Update existing product IDs in database to match Square catalog IDs.
+    
+    Args:
+        business: The business object
+        product_name_to_id_map: Dictionary mapping product names to Square catalog IDs
+    """
+    try:
+        with transaction.atomic():
+            db_products = SalesDataPoint.objects.filter(
+                business=business,
+                product_name__isnull=False
+            ).values('product_name').distinct()
+            
+            for product in db_products:
+                product_name = product['product_name']
+                normalized_name = product_name.strip().lower()
+                
+                if normalized_name in product_name_to_id_map:
+                    square_id = product_name_to_id_map[normalized_name]
+                    
+                    update_result = SalesDataPoint.objects.filter(
+                        business=business,
+                        product_name=product_name
+                    ).update(product_id=square_id)
+    except Exception as e:
+        logger.error(f"Error updating product IDs: {e}")

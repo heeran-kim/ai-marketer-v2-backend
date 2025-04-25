@@ -28,6 +28,7 @@ class SalesDataPoint(models.Model):
     )
     business = models.ForeignKey(Business, on_delete=models.CASCADE)
     date = models.DateField()
+    revenue = models.DecimalField(max_digits=10, decimal_places=2)
     source_file = models.ForeignKey(SalesData, on_delete=models.CASCADE, null=True, blank=True)
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='upload')
     product_id = models.CharField(max_length=100, null=True, blank=True)
