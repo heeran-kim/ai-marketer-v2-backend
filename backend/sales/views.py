@@ -114,7 +114,7 @@ class SalesDataView(APIView):
             date__gte=start_date,
             date__lte=end_date,
             product_name__isnull=False  # Only include data points with product name
-        ).values('product_id', 'product_name').annotate(
+        ).values('product_name').annotate(
             total_revenue=Sum('revenue'),
             total_units=Sum('units_sold'),
             average_price=Avg('product_price')
@@ -125,40 +125,35 @@ class SalesDataView(APIView):
         bottom_products = list(product_data.order_by('total_units')[:3])
         
         # 3. Get all product sales by date for selected products
-        top_product_ids = [p['product_id'] for p in top_products if p['product_id']]
-        bottom_product_ids = [p['product_id'] for p in bottom_products if p['product_id']]
+        top_product_names = [p['product_name'] for p in top_products if p['product_name']]
+        bottom_product_names = [p['product_name'] for p in bottom_products if p['product_name']]
         
         # Get daily data for all products in the selected groups
         daily_product_data = SalesDataPoint.objects.filter(
             business=business,
             date__gte=start_date,
             date__lte=end_date,
-            product_id__in=top_product_ids + bottom_product_ids  # Get data for both top and bottom products
-        ).values('date', 'product_id', 'product_name').annotate(
+            product_name__in=top_product_names + bottom_product_names
+        ).values('date', 'product_name').annotate(
             daily_revenue=Sum('revenue')
-        ).order_by('date', 'product_id')
+        ).order_by('date')
         
         # Organize data by product and date
         top_products_by_date = defaultdict(lambda: defaultdict(float))
         bottom_products_by_date = defaultdict(lambda: defaultdict(float))
         
-        # Keep track of product names
-        product_names = {}
-        
         # Fill data for each day and product
         for entry in daily_product_data:
             date_str = entry['date'].strftime('%d-%m-%Y')
-            product_id = entry['product_id']
             product_name = entry['product_name']
             revenue = float(entry['daily_revenue'])
             
-            product_names[product_id] = product_name
-            
             # Store in correct category (top or bottom)
-            if product_id in top_product_ids:
-                top_products_by_date[date_str][product_id] = revenue
-            if product_id in bottom_product_ids:
-                bottom_products_by_date[date_str][product_id] = revenue
+            if product_name in top_product_names:
+                top_products_by_date[date_str][product_name] = revenue
+            
+            if product_name in bottom_product_names:
+                bottom_products_by_date[date_str][product_name] = revenue
         
         # Create datasets for chart.js
         top_datasets = []
@@ -168,15 +163,14 @@ class SalesDataView(APIView):
         colors = ['#FF6384', '#36A2EB', '#FFCE56']
         
         # Create datasets for top products
-        for i, product_id in enumerate(top_product_ids):
-            if not product_id:
+        for i, product_name in enumerate(top_product_names):
+            if not product_name:
                 continue
-                
-            product_name = product_names.get(product_id, f"Product {i+1}")
+
             data = []
             
             for date_str in labels:
-                data.append(top_products_by_date[date_str][product_id])
+                data.append(top_products_by_date[date_str][product_name])
             
             top_datasets.append({
                 "label": product_name,
@@ -187,15 +181,14 @@ class SalesDataView(APIView):
             })
         
         # Create datasets for bottom products
-        for i, product_id in enumerate(bottom_product_ids):
-            if not product_id:
+        for i, product_name in enumerate(bottom_product_names):
+            if not product_name:
                 continue
                 
-            product_name = product_names.get(product_id, f"Product {i+1}")
             data = []
             
             for date_str in labels:
-                data.append(bottom_products_by_date[date_str][product_id])
+                data.append(bottom_products_by_date[date_str][product_name])
             
             bottom_datasets.append({
                 "label": product_name,
@@ -293,56 +286,23 @@ class SalesDataView(APIView):
             
             # Calculate revenue for each row
             df['Revenue'] = df['Price'].astype(float) * df['Quantity'].astype(int)
-
-            is_square_connected = bool(business.square_access_token)
-            product_name_to_id_map = {}
-            if is_square_connected:
-                try:
-                    from utils.square_api import get_square_client
-                    
-                    client = get_square_client(business)
-                    if client:
-                        catalog_api = client.catalog
-                        catalog_response = catalog_api.list_catalog(
-                            cursor=None,
-                            types=["ITEM"]
-                        )
-                        
-                        if catalog_response.is_success():
-                            # Extract product names and IDs from Square catalog
-                            for obj in catalog_response.body.get("objects", []):
-                                if obj.get("type") == "ITEM" and "item_data" in obj:
-                                    item_data = obj["item_data"]
-                                    item_id = obj["id"]
-                                    item_name = item_data.get("name", "").strip()
-                                    
-                                    # Normalize the name for case-insensitive comparison
-                                    normalized_name = item_name.lower()
-                                    product_name_to_id_map[normalized_name] = item_id
-                except Exception as e:
-                    logger.error(f"Error fetching Square catalog: {e}")
-                    # Continue with standard ID generation if Square catalog fetch fails
-                    
-            # Create or assign Product IDs
-            df['Product ID'] = df['Product Name'].apply(lambda name: self._get_product_id(name, product_name_to_id_map))
             
-            grouped_df = df.groupby(['DateOnly', 'Product ID', 'Price']).agg({
-                'Product Name': 'first',
+            grouped_df = df.groupby(['DateOnly', 'Product Name', 'Price']).agg({
                 'Quantity': 'sum',
                 'Revenue': 'sum'
             }).reset_index()
 
             dates = grouped_df['DateOnly'].unique().tolist()
-            product_ids = grouped_df['Product ID'].unique().tolist()
+            product_names = grouped_df['Product Name'].unique().tolist()
 
             existing_records = {}
             for record in SalesDataPoint.objects.filter(
                 business=business,
                 date__in=dates,
-                product_id__in=product_ids,
+                product_name__in=product_names,
                 source='upload'
             ):
-                key = (record.date, record.product_id, record.product_price)
+                key = (record.date, record.product_name, record.product_price)
                 existing_records[key] = record
 
             records_to_update = []
@@ -350,13 +310,12 @@ class SalesDataView(APIView):
 
             for _, row in grouped_df.iterrows():
                 date = row['DateOnly']
-                product_id = str(row['Product ID'])
                 product_name = row['Product Name']
                 price = float(row['Price'])
                 quantity = int(row['Quantity'])
                 revenue = float(row['Revenue'])
                 
-                key = (date, product_id, price)
+                key = (date, product_name, price)
                 
                 if key in existing_records:
                     record = existing_records[key]
@@ -367,7 +326,6 @@ class SalesDataView(APIView):
                     record = SalesDataPoint(
                         business=business,
                         date=date,
-                        product_id=product_id,
                         product_name=product_name,
                         product_price=price,
                         units_sold=quantity,
@@ -398,23 +356,6 @@ class SalesDataView(APIView):
         except Exception as e:
             logger.error(f"❌ CSV upload failed — {str(e)}", exc_info=True)
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
-    
-    def _get_product_id(self, product_name, product_name_to_id_map):
-        """
-        Helper method to get product ID from name.
-        If name exists in Square catalog, returns Square ID.
-        Otherwise, generates an ID from the name.
-        """
-        normalized_name = product_name.strip().lower()
-        
-        # Check if name exists in Square mapping
-        if normalized_name in product_name_to_id_map:
-            return product_name_to_id_map[normalized_name]
-        
-        # Otherwise generate an ID from name
-        safe_name = re.sub(r'[^a-z0-9]', '_', normalized_name)
-        return f"gen_{safe_name}"
 
 class RefreshSalesDataView(APIView):
     """
