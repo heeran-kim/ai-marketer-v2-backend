@@ -21,6 +21,8 @@ import io
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from django.core.files import File
+
 from cryptography.fernet import Fernet #cryptography package
 
 TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
@@ -32,10 +34,73 @@ class PostListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
 
+    def get_meta_posts(self, user):
+        #Get Access Token
+        token_decoded = self.get_user_access_token(user)
+        #Get Facebook page id
+        facebookPageID=self.get_facebook_page_id(token_decoded)
+        if not facebookPageID:
+            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+        # Get the Instagram account ID
+        instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
+        if not instagram_account_id:    
+            return {"error": "Unable to retrieve Insta ID", "status": False}
+        #Send request to Meta API to get posts
+        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media?fields=id,caption,media_type,media_url,timestamp,permalink,thumbnail_url,children&access_token={token_decoded}'
+        response = requests.get(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": f"Unable to fetch posts. {response.text}", "status": False}
+        media_data = response.json()
+        if not media_data.get("data"):
+            return {"error": f"Unable to retrieve posts {response.text}", "status": False}
+        posts_data = media_data.get("data")
+        return {"message": posts_data, "status": True}
+    
+    def save_meta_image(self, image_url, save_path):
+        # Download the image and save it
+        response = requests.get(image_url)
+
+        if response.status_code == 200:
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+            return save_path
+        else:
+            return "/app/media/business_posts/1/easter-holiday.jpg"
+
     def get_queryset(self):
         business = Business.objects.filter(owner=self.request.user).first()
         if not business:
             return Post.objects.none()
+        
+        #Save posts to the database
+        get_posts = self.get_meta_posts(self.request.user)
+        if get_posts.get("status") == False:
+            logger.error(f"Error fetching posts: {get_posts.get('error')}")
+            return Post.objects.none()
+        posts_data = get_posts.get("message")
+
+        for post_data in posts_data:
+            # Check if the post already exists in the database
+            if Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform='instagram'), link=post_data.get("permalink")).exists():
+                continue
+            # Create a new Post object
+            file_path= self.save_meta_image(post_data.get('media_url'),f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg") if post_data.get("media_type") == "IMAGE" else "/app/media/No_Image_Available.jpg"
+            with open(file_path, 'rb') as f:
+                django_file = File(f)
+                post = Post(
+                    business=business,
+                    platform=SocialMedia.objects.get(platform='instagram'),
+                    caption=post_data.get("caption"),
+                    link=post_data.get("permalink"),
+                    posted_at=post_data.get("timestamp"),
+                    image=django_file,
+                    scheduled_at=None,
+                    status='Published',
+                    promotion=None
+                )
+                # Save the post to the database
+                post.save()
 
         failed_posts = list(Post.objects.filter(
             business=business,
@@ -63,7 +128,7 @@ class PostListCreateView(ListCreateAPIView):
             "posts": serialized_posts,
         }
 
-        return Response(response_data)
+        return Response(response_data, status=status.HTTP_200_OK)
     
     def get_facebook_page_id(self,access_token):
         #Retrieve facebook page id data from Meta's API
@@ -114,19 +179,19 @@ class PostListCreateView(ListCreateAPIView):
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
         return resized
     
-    def publishToMeta(self, platform, caption, image_file, user,aspectRatio,scheduled_at=None):
+    def get_user_access_token(self, user):
         f = Fernet(TWOFA_ENCRYPTION_KEY) 
         token=user.access_token[1:]  #do 1: to not include byte identifier
         token_decrypted=f.decrypt(token)
         token_decoded=token_decrypted.decode()
+        return token_decoded
+    
+    def publishToMeta(self, platform, caption, image_file, user,aspectRatio,scheduled_at=None):
+        token_decoded = self.get_user_access_token(user)
 
         facebookPageID=self.get_facebook_page_id(token_decoded)
         if not facebookPageID:
             return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
-        # Get the Instagram account ID
-        instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
-        if not instagram_account_id:    
-            return {"error": "Unable to retrieve Insta ID", "status": False}
 
         #Get Image setup
         headers = {
@@ -205,6 +270,11 @@ class PostListCreateView(ListCreateAPIView):
 
         #For Instagram
         #Create media object
+        # Get the Instagram account ID
+        instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
+        if not instagram_account_id:    
+            return {"error": "Unable to retrieve Insta ID", "status": False}
+        
         url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media'
         data = {
             "image_url": image_url,
@@ -351,8 +421,6 @@ class PostListCreateView(ListCreateAPIView):
             posted_at = timezone.now()
             link = "test.com"
             post_status = "Published"
-
-        # return Response({"error": scheduled_at}, status=status.HTTP_400_BAD_REQUEST)
 
         match data["platform"]:
             case 'facebook':
