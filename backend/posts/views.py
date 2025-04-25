@@ -34,13 +34,28 @@ class PostListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
 
-    def get_meta_posts(self, user):
+    def get_meta_posts(self, user, platform):
         #Get Access Token
         token_decoded = self.get_user_access_token(user)
         #Get Facebook page id
         facebookPageID=self.get_facebook_page_id(token_decoded)
         if not facebookPageID:
             return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+        
+        #For Facebook
+        if platform == 'facebook':
+            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,message,created_time,permalink_url,full_picture,comments,likes&access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to fetch posts. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("data"):
+                return {"error": f"Unable to retrieve posts {response.text}", "status": False}
+            posts_data = media_data.get("data")
+            return {"message": posts_data, "status": True}
+        
+        #For Instagram
         # Get the Instagram account ID
         instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
         if not instagram_account_id:    
@@ -67,14 +82,10 @@ class PostListCreateView(ListCreateAPIView):
             return save_path
         else:
             return "/app/media/No_Image_Available.jpg"
-
-    def get_queryset(self):
-        business = Business.objects.filter(owner=self.request.user).first()
-        if not business:
-            return Post.objects.none()
         
+    def meta_get_function(self, business, platform):
         #Save posts to the database
-        get_posts = self.get_meta_posts(self.request.user)
+        get_posts = self.get_meta_posts(self.request.user,platform)
         if get_posts.get("status") == False:
             logger.error(f"Error fetching posts: {get_posts.get('error')}")
             return Post.objects.none()
@@ -82,7 +93,7 @@ class PostListCreateView(ListCreateAPIView):
 
         for post_data in posts_data:
             # Check if the post already exists in the database
-            if Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform='instagram'), link=post_data.get("permalink")).exists():
+            if Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform=platform), link=post_data.get("permalink")).exists():
                 continue
             # Create a new Post object
             file_path= self.save_meta_image(post_data.get('media_url'),f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg") if post_data.get("media_type") == "IMAGE" else "/app/media/No_Image_Available.jpg"
@@ -93,7 +104,7 @@ class PostListCreateView(ListCreateAPIView):
                 django_file = File(f)
                 post = Post(
                     business=business,
-                    platform=SocialMedia.objects.get(platform='instagram'),
+                    platform=SocialMedia.objects.get(platform=platform),
                     caption=post_data.get("caption"),
                     link=post_data.get("permalink"),
                     posted_at=post_data.get("timestamp"),
@@ -106,6 +117,32 @@ class PostListCreateView(ListCreateAPIView):
                 )
                 # Save the post to the database
                 post.save()
+
+
+    def get_queryset(self):
+        business = Business.objects.filter(owner=self.request.user).first()
+        if not business:
+            return Post.objects.none()
+        
+        linked_platforms_queryset = SocialMedia.objects.filter(business=business)
+        linked_platforms = [
+            {
+                "key": linked_platform.platform,
+                "label": next(
+                    (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
+                    linked_platform.platform
+                ),
+            }
+            for linked_platform in linked_platforms_queryset
+        ]
+
+        # Check if the business is linked to Facebook
+        if any(platform["key"] == "facebook" for platform in linked_platforms):
+            self.meta_get_function(business,'facebook')
+        # Check if the business is linked to Instagram
+        if any(platform["key"] == "instagram" for platform in linked_platforms):
+            # Get posts from Meta API
+            self.meta_get_function(business,'instagram')
 
         failed_posts = list(Post.objects.filter(
             business=business,
