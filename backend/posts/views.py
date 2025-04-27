@@ -138,6 +138,7 @@ class PostListCreateView(ListCreateAPIView):
                     platform=SocialMedia.objects.get(platform=platform),
                     caption=post_data.get("caption") if platform=='instagram' else post_data.get("message"),
                     link=link,
+                    post_id=post_data.get("id"),
                     posted_at=post_data.get("timestamp") if platform=='instagram' else post_data.get("created_time"),
                     image=django_file,
                     scheduled_at=None,
@@ -614,12 +615,50 @@ class PostDetailView(APIView):
 
         serializer = PostSerializer(post)
         return Response(serializer.data)
+    
+    def get_user_access_token(self, user):
+        f = Fernet(TWOFA_ENCRYPTION_KEY) 
+        token=user.access_token[1:]  #do 1: to not include byte identifier
+        token_decrypted=f.decrypt(token)
+        token_decoded=token_decrypted.decode()
+        return token_decoded
+    
+    def delete_facebook(self,token_decoded,post_id):
+        #Get page access token
+        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+        response = requests.get(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+        metasData = response.json()
+        if not metasData.get("data"):
+            return {"error": "Unable to retrieve page access token 2", "status": False}
+        #Get the page access token
+        page_access_token = metasData.get("data")[0]["access_token"]
+
+        url = f'https://graph.facebook.com/v22.0/{post_id}?access_token={page_access_token}'
+        response=requests.delete(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": f"Unable to delete post. {response.text}", "status": False}
+        metasData = response.json()
+        if not metasData.get("success"):
+            return {"error": "Unable to retrieve post deletion status", "status": False}
+        return {"message": metasData.get("success"), "status": True}
 
     def delete(self, request, pk):
         """Delete a post"""
         post, error_response = self.get_post(pk, request.user)
+
         if error_response:
             return error_response
+
+        if post.platform.platform=='instagram':
+            return Response({"message": "Instagram deletion not implemented yet"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        delete_message = self.delete_facebook(self.get_user_access_token(request.user),post.post_id)
+        if(delete_message['status'] == False):
+            return Response({"message": "Some Error Deleting Post"}, status=status.HTTP_400_BAD_REQUEST)
 
         post.delete()
         return Response({"message": "Post deleted successfully"}, status=status.HTTP_200_OK)

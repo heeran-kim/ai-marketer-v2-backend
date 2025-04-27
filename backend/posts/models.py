@@ -22,6 +22,7 @@ class Post(models.Model):
     caption = models.TextField()  # Text for the post's caption or message
     image = models.ImageField(upload_to=post_image_path)
     link = models.URLField(blank=True, null=True)  # Optional URL (e.g., link to a website)
+    post_id = models.TextField(blank=True) # Text field for the posts id stored for deletion later on
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the post was created
     posted_at = models.DateTimeField(blank=True, null=True) # Timestamp when post is published
     scheduled_at = models.DateTimeField(blank=True, null=True) # Timestamp for when the post is scheduled to be published
