@@ -44,7 +44,18 @@ class PostListCreateView(ListCreateAPIView):
         
         #For Facebook
         if platform == 'facebook':
-            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,message,created_time,permalink_url,full_picture,comments,likes&access_token={token_decoded}'
+            #Get page access token
+            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+            metasData = response.json()
+            if not metasData.get("data"):
+                return {"error": "Unable to retrieve page access token 2", "status": False}
+            #Get the page access token
+            page_access_token = metasData.get("data")[0]["access_token"]
+            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true)&access_token={page_access_token}' #comments.summary(true) isnt working atm
             response = requests.get(url)
             if response.status_code != 200:
                 # Handle error response
@@ -72,7 +83,15 @@ class PostListCreateView(ListCreateAPIView):
         posts_data = media_data.get("data")
         return {"message": posts_data, "status": True}
     
-    def save_meta_image(self, image_url, save_path):
+    def save_meta_image(self, post_data, save_path,platform):
+        media_type=post_data.get('media_type') if platform=="instagram" else "IMAGE" #Image for facebook
+        image_url=None
+        if media_type == "IMAGE" or media_type == "CAROUSEL_ALBUM":
+            image_url = post_data.get('media_url') if platform == "instagram" else post_data.get('full_picture')
+        elif media_type == "VIDEO" and platform == "instagram":
+            image_url = post_data.get('thumbnail_url')
+        else:
+            return "/app/media/No_Image_Available.jpg"
         # Download the image and save it
         response = requests.get(image_url)
 
@@ -91,12 +110,24 @@ class PostListCreateView(ListCreateAPIView):
             return Post.objects.none()
         posts_data = get_posts.get("message")
 
+        #Check if it was a reset by the user - Not used
+        # param = self.request.GET.get('status', None)
+        # logger.error(f"Param {param}")
+
         for post_data in posts_data:
-            # Check if the post already exists in the database
-            if Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform=platform), link=post_data.get("permalink")).exists():
+            # Check if the post already exists in the database and update reactions
+            link=post_data.get("permalink") if platform=='instagram' else post_data.get("permalink_url")
+            if Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform=platform), link=link).exists():
+                found_post=Post.objects.filter(business=business, platform=SocialMedia.objects.get(platform=platform), link=link).first()
+                comments = post_data.get("comments", 0)
+                comment_count=len(post_data.get("comments").get("data")) if comments else 0
+                found_post.comments= comment_count #if platform=='instagram' else post_data.get('comments').get('summary').get('total_count') not working
+                
+                found_post.reactions=post_data.get("like_count", 0) if platform=='instagram' else post_data.get('likes').get('summary').get('total_count')
+                found_post.save()
                 continue
             # Create a new Post object
-            file_path= self.save_meta_image(post_data.get('media_url'),f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg") if post_data.get("media_type") == "IMAGE" else "/app/media/No_Image_Available.jpg"
+            file_path= self.save_meta_image(post_data,f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg",platform)
             comments= post_data.get("comments", 0)
             comment_count=len(post_data.get("comments").get("data")) if comments else 0
 
@@ -105,15 +136,15 @@ class PostListCreateView(ListCreateAPIView):
                 post = Post(
                     business=business,
                     platform=SocialMedia.objects.get(platform=platform),
-                    caption=post_data.get("caption"),
-                    link=post_data.get("permalink"),
-                    posted_at=post_data.get("timestamp"),
+                    caption=post_data.get("caption") if platform=='instagram' else post_data.get("message"),
+                    link=link,
+                    posted_at=post_data.get("timestamp") if platform=='instagram' else post_data.get("created_time"),
                     image=django_file,
                     scheduled_at=None,
                     status='Published',
                     promotion=None,
-                    reactions=post_data.get("like_count", 0),
-                    comments=comment_count
+                    reactions=post_data.get("like_count", 0) if platform=='instagram' else post_data.get('likes').get('summary').get('total_count'),
+                    comments=comment_count #if platform=='instagram' else post_data.get('comments').get('summary').get('total_count') not working atm
                 )
                 # Save the post to the database
                 post.save()
