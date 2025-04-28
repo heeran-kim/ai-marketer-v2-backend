@@ -5,7 +5,6 @@ from square.client import Client
 from datetime import datetime, timedelta
 from pytz import timezone
 from django.db import transaction 
-from collections import defaultdict
 from decimal import Decimal
 import base64
 import secrets
@@ -185,15 +184,10 @@ def format_square_item(item):
 def fetch_and_save_square_sales_data(business):
     """
     Fetch sales data from Square API and save it to the database.
-    Args:
-        business (Business): The business object for which to fetch sales data.
-    """
-    method = 'orders' # 'payments' or 'orders'
-
+    """    
     # Calculate the date range
     end_date = datetime.now(timezone('UTC')).isoformat()
     
-    # Check if last_square_sync_at is set, otherwise default to 30 days ago
     if business.last_square_sync_at:
         start_date = business.last_square_sync_at.isoformat()
     else:
@@ -211,104 +205,108 @@ def fetch_and_save_square_sales_data(business):
         "Authorization": f"Bearer {business.square_access_token}",
         "Content-Type": "application/json"
     }
-
-    if method == 'payments':
-        url = f"{settings.SQUARE_BASE_URL}/v2/payments"
-        params = {
-            "begin_time": start_date,
-            "end_time": end_date,
-            "sort_field": "CREATED_AT",
-            "sort_order": "DESC",
-            "location_id": location_id,
-        }
-        response = requests.get(url, headers=headers, params=params)
-    elif method == 'orders':
-        url = f"{settings.SQUARE_BASE_URL}/v2/orders/search"
-        body = {
-            "location_ids": [location_id],
-            "query": {
-                "filter": {
-                    "date_time_filter": {
-                        "created_at": {
-                            "start_at": start_date,
-                            "end_at": end_date
-                        }
+    
+    # Fetch order data
+    url = f"{settings.SQUARE_BASE_URL}/v2/orders/search"
+    body = {
+        "location_ids": [location_id],
+        "query": {
+            "filter": {
+                "date_time_filter": {
+                    "created_at": {
+                        "start_at": start_date,
+                        "end_at": end_date
                     }
                 }
-            },
-            "sort": {
-                "sort_field": "CREATED_AT",
-                "sort_order": "DESC"
-            },
-            "limit": 1000 # Default: 500 Max: 1000
-        }
-        response = requests.post(url, headers=headers, json=body)
-    else:
-        raise Exception(f"Wrong method is selected: {method}")
+            }
+        },
+        "sort": {
+            "sort_field": "CREATED_AT",
+            "sort_order": "DESC"
+        },
+        "limit": 1000  # Default: 500 Max: 1000
+    }
+
+    response = requests.post(url, headers=headers, json=body)
 
     if response.status_code != 200:
         logger.error(f"Error fetching sales data: {response.status_code}, {response.text}")
         raise Exception(f"Square API error: {response.status_code}, {response.text}")
 
     sales_data = response.json()
-    logger.info(f"Sales data fetched successfully: {sales_data}")
 
+    # Prepare the sales data for saving
     if sales_data:
-        # Prepare the sales data for saving
         business_timezone = timezone('Australia/Brisbane')
-        daily_revenue = defaultdict(Decimal)
-        if method == 'payments':
-            items = sales_data['payments']
-            for record in items:
-                date = record['created_at']
-                revenue = Decimal(record['amount_money']['amount']) / Decimal(100)
-                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-                date_obj_local = date_obj.astimezone(business_timezone).date()
-                daily_revenue[date_obj_local] += revenue
-        elif method == 'orders':
-            items = sales_data['orders']
-            for record in items:
-                date = record['created_at']
-                money_info = record.get('total_money')
-                if not money_info:
-                    continue
-                revenue = Decimal(money_info['amount']) / Decimal(100)
-                date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-                date_obj_local = date_obj.astimezone(business_timezone).date()
-                daily_revenue[date_obj_local] += revenue
-
-        logger.debug(f"Daily revenue calculated: {daily_revenue}")
         
-        # Prepare the sales data points for saving or updating
         sales_points = []
-        for day, amount in daily_revenue.items():
-            # Check if the sales data point already exists
-            existing_point = SalesDataPoint.objects.filter(
-                business=business, date=day, source='square'
-            ).first()
+                
+        items = sales_data.get('orders', [])
+        
+        for order in items:
+            # Skip orders with no line items
+            if not order.get('line_items'):
+                continue
+            
+            order_date = order.get('created_at')
+            date_obj = datetime.strptime(order_date, '%Y-%m-%dT%H:%M:%S.%fZ')
+            date_obj_local = date_obj.astimezone(business_timezone).date()
+            
+            for line_item in order.get('line_items', []):
+                name = line_item.get('name', 'Unknown Product')
 
-            if existing_point:
-                # Update the existing record
-                existing_point.revenue += amount
-                sales_points.append(existing_point)
-            else:
-                # Create a new record
-                sales_points.append(SalesDataPoint(business=business, date=day, revenue=amount, source='square'))
+                quantity = int(line_item.get('quantity', 1))
+                
+                # Get the price from the line item
+                base_price_money = line_item.get('base_price_money', {})
+                price_amount = base_price_money.get('amount', 0)
+                price = Decimal(price_amount) / Decimal(100)
 
-        logger.debug(f"Prepared {sales_points} sales data points for saving.")
+                revenue = price * quantity
+                
+                # Skip items with zero revenue
+                if revenue <= 0:
+                    continue
+                
+                # Look for existing data point to update
+                existing = SalesDataPoint.objects.filter(
+                    business=business,
+                    date=date_obj_local,
+                    product_name=name,
+                    product_price=price,
+                    source='square'
+                ).first()
+                
+                if existing:
+                    # Update existing record
+                    existing.units_sold += quantity
+                    existing.revenue = existing.revenue + revenue
+                    sales_points.append(existing)
+                else:
+                    # Create new record
+                    sales_point = SalesDataPoint(
+                        business=business,
+                        date=date_obj_local,
+                        product_name=name,
+                        product_price=price,
+                        units_sold=quantity,
+                        revenue=revenue,
+                        source='square'
+                    )
+                    sales_points.append(sales_point)
 
         # Save the sales data to the database within a transaction
         if sales_points:
             with transaction.atomic():
                 # Bulk create or update
                 SalesDataPoint.objects.bulk_update(
-                    [point for point in sales_points if point.pk is not None], ['revenue']
+                    [point for point in sales_points if point.pk is not None], 
+                    ['units_sold', 'revenue', 'product_name']
                 )
                 SalesDataPoint.objects.bulk_create(
                     [point for point in sales_points if point.pk is None]
                 )
-                logger.debug(f"Saved {len(sales_points)} sales data points to the database.")
     
     business.last_square_sync_at = datetime.now(timezone('UTC'))
     business.save()
-    logger.debug(f"Updated last_square_sync_at for business {business.id} to {business.last_square_sync_at}")
+    
