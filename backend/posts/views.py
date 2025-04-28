@@ -101,6 +101,26 @@ class PostListCreateView(ListCreateAPIView):
             return save_path
         else:
             return "/app/media/No_Image_Available.jpg"
+
+    def remove_deleted_posts(self,platform,posts_data,business):
+        platform_obj = SocialMedia.objects.get(platform=platform)
+
+        # Collect all links you want to match against
+        links = [
+            post_data.get("permalink") if platform == 'instagram' else post_data.get("permalink_url")
+            for post_data in posts_data
+        ]
+
+        # Fetch posts for the business and platform where link is NOT in the list
+        posts_not_in_links = Post.objects.filter(
+            business=business,
+            platform=platform_obj
+        ).exclude(
+            link__in=links
+        )
+
+        for post in posts_not_in_links:
+            post.delete()
         
     def meta_get_function(self, business, platform):
         #Save posts to the database
@@ -113,6 +133,8 @@ class PostListCreateView(ListCreateAPIView):
         #Check if it was a reset by the user - Not used
         # param = self.request.GET.get('status', None)
         # logger.error(f"Param {param}")
+
+        self.remove_deleted_posts(platform,posts_data,business)
 
         for post_data in posts_data:
             # Check if the post already exists in the database and update reactions
