@@ -55,7 +55,7 @@ class PostListCreateView(ListCreateAPIView):
                 return {"error": "Unable to retrieve page access token 2", "status": False}
             #Get the page access token
             page_access_token = metasData.get("data")[0]["access_token"]
-            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true)&access_token={page_access_token}' #comments.summary(true) isnt working atm
+            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true)&access_token={page_access_token}'
             response = requests.get(url)
             if response.status_code != 200:
                 # Handle error response

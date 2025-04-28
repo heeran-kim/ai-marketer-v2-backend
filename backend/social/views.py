@@ -54,7 +54,7 @@ class ConnectSocialAccountView(APIView):
             client_id = FACEBOOK_APP_ID
             redirect_uri = f'{FACEBOOK_REDIRECT_URI}{provider}'
             #scope = 'pages_show_list,business_management,pages_read_engagement,instagram_basic,instagram_content_publish' if other_meta_platform.exists() else('pages_show_list,instagram_basic,instagram_content_publish' if provider=="instagram" else 'pages_show_list,business_management,pages_read_engagement')
-            scope = 'pages_show_list,business_management,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish'
+            scope = 'pages_show_list,pages_read_user_content,business_management,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish'
             login_url = f"https://www.facebook.com/v22.0/dialog/oauth?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}&response_type=code"
             return Response({'link':login_url},status=status.HTTP_200_OK)
 
