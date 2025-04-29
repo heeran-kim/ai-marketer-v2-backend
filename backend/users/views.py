@@ -5,12 +5,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
+
 from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
+
+from businesses.models import Business
+from utils.square_api import fetch_and_save_square_sales_data
 
 from cryptography.fernet import Fernet #cryptography package
 
@@ -99,6 +103,14 @@ class LoginView(APIView):
             samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],  # Cross-site protection
             max_age=60 * 60 * 24,  # Valid for 1 day
         )
+
+        # Retrieve the business associated with the current user
+        business = Business.objects.filter(owner=user).first()
+
+        # If a business is found, fetch and save the latest Square sales data
+        if business:
+            fetch_and_save_square_sales_data(business)
+
         # Return the refresh token in the response (frontend can store it securely)
         return response
 
