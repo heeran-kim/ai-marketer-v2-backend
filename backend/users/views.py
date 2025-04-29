@@ -110,6 +110,14 @@ class LoginView(APIView):
         # If a business is found, fetch and save the latest Square sales data
         if business:
             fetch_and_save_square_sales_data(business)
+            response.set_cookie(
+                key="business_id",
+                value=str(business.id),
+                path="/",
+                httponly=True,
+                secure=True,
+                samesite="None",
+            )
 
         # Return the refresh token in the response (frontend can store it securely)
         return response

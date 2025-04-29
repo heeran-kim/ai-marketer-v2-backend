@@ -5,6 +5,7 @@ from rest_framework import status, viewsets
 from businesses.models import Business
 from .models import Promotion, PromotionSuggestion
 from .serializers import PromotionSerializer, SuggestionSerializer
+from sales.models import SalesDataPoint
 
 class PromotionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -44,6 +45,25 @@ class PromotionViewSet(viewsets.ModelViewSet):
             return promotion, None
         except Promotion.DoesNotExist:
             return None, Response({"error": "Promotion not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+    def list(self, request, *args, **kwargs):
+        """Retrieve all promotions or suggestions"""
+        response = super().list(request, *args, **kwargs)
+        
+        type_param = self.request.query_params.get('type')
+        if type_param == 'suggestions':
+            business = Business.objects.filter(owner=self.request.user).first()
+            has_sales_data = False
+
+            if business:
+                has_sales_data = SalesDataPoint.objects.filter(business=business).exists()
+            
+            response.data = {
+                "has_sales_data": has_sales_data,
+                "suggestions": response.data
+            }
+
+        return response
         
     def retrieve(self, request, pk=None):
         """Retrieve a specific promotion"""
