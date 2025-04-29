@@ -162,6 +162,7 @@ class LogoutView(APIView):
 
         # Remove Refresh Token from HttpOnly Cookie
         response.delete_cookie("refresh_token")
+        response.delete_cookie("business_id") 
 
         # Blacklist the refresh token (optional, only if using blacklisting)
         refresh_token = request.data.get("refresh")
