@@ -86,13 +86,13 @@ SESSION_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
 # CSRF Settings
 CSRF_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
 CSRF_COOKIE_DOMAIN = None 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "https://localhost:3000,https://127.0.0.1:3000").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 
 # CORS Settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "https://localhost:3000,https://127.0.0.1:3000"
+    "http://localhost:3000,http://127.0.0.1:3000"
 ).split(",")
 
 # DRF Default Authentication Settings
@@ -153,6 +153,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+
 # Django Admin & Template Setting
 ROOT_URLCONF = "backend.urls"
 TEMPLATES = [
@@ -175,17 +176,12 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
-    "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
-    if os.getenv("USE_RENDER_DB") == "true"
-    else {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB"),
-        "USER": os.getenv("POSTGRES_USER"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
-        "HOST": os.getenv("POSTGRES_HOST"),
-        "PORT": os.getenv("POSTGRES_PORT"),
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -266,3 +262,24 @@ LOGGING = {
         },
     },
 }
+
+# In config/settings.py
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+
+# EMAIL_HOST_USER = 'drishtimadaan9@gmail.com'
+# EMAIL_HOST_PASSWORD = 'wlxo dsro mjgm ghdx'
+
+# DEFAULT_FROM_EMAIL = 'AI Marketer <drishtimadaan9@gmail.com>'
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = 'akastudioaimarketer@gmail.com'
+EMAIL_HOST_PASSWORD = 'sibo nkqr khpp yxwr'
+DEFAULT_FROM_EMAIL = 'AI Marketer <akastudioaimarketer@gmail.com>'
