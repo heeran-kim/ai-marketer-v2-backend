@@ -17,24 +17,34 @@ def get_square_summary(business):
     """
     Fetch summary data from Square API for a given business.
     """
-    result = {
-        "square_connected": False,
-        "items": [],
-    }
-
     client = get_square_client(business)
+    if client is None:
+        return {
+            "square_connected": False,
+            "items": [],
+        }
+    
     locations = get_square_locations(client)    
-    if locations:
-        result["square_connected"] = True
+    if not locations:
+        return {
+            "square_connected": False,
+            "items": [],
+        }
     
     items = get_square_items(client)
-    if items:
-        result["items"] = {
+    if not items:
+        return {
+            "square_connected": True,
+            "items": [],
+        }
+    
+    return {
+        "square_connected": True,
+        "items": {
             item["name"].lower(): item["description_with_price"]
             for item in reformat_square_items(items)
         }
-
-    return result
+    }
     
 def get_square_client(business):
     """Initialize Square client from business token."""
@@ -184,7 +194,7 @@ def format_square_item(item):
 def fetch_and_save_square_sales_data(business):
     """
     Fetch sales data from Square API and save it to the database.
-    """    
+    """
     # Calculate the date range
     end_date = datetime.now(timezone('UTC')).isoformat()
     
