@@ -15,6 +15,7 @@ class PromotionSerializer(serializers.ModelSerializer):
     )
     categories = serializers.SerializerMethodField(read_only=True)
     end_date = serializers.DateField(required=False, allow_null=True)
+    product_names = serializers.JSONField(required=False, allow_null=True)
 
     class Meta:
         model = Promotion
@@ -28,6 +29,7 @@ class PromotionSerializer(serializers.ModelSerializer):
             "end_date",
             "status",
             "sold_count",
+            "product_names",
         ]
 
     def get_categories(self, obj):
@@ -61,6 +63,8 @@ class PromotionSerializer(serializers.ModelSerializer):
     
 class SuggestionSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
+    product_names = serializers.JSONField(required=False, allow_null=True)
+    data_period = serializers.SerializerMethodField()
 
     class Meta:
         model = PromotionSuggestion
@@ -69,6 +73,9 @@ class SuggestionSerializer(serializers.ModelSerializer):
             "title",
             "categories",
             "description",
+            "product_names",
+            "data_period",
+            "is_dismissed",
         ]
 
     def get_categories(self, obj):
@@ -76,4 +83,14 @@ class SuggestionSerializer(serializers.ModelSerializer):
             {"id": category.id, "key": category.key, "label": category.label} 
             for category in obj.categories.all()
         ]
+    
+    def get_data_period(self, obj):
+        """Format date range used for generating suggestion"""
+        if not obj.data_start_date or not obj.data_end_date:
+            return None
+        
+        return {
+            "start_date": obj.data_start_date.isoformat(),
+            "end_date": obj.data_end_date.isoformat()
+        }
     

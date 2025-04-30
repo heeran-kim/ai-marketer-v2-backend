@@ -3,9 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from businesses.models import Business
+
 from .models import Promotion, PromotionCategories, PromotionSuggestion
 from .serializers import PromotionSerializer, SuggestionSerializer
+from businesses.models import Business
 from sales.models import SalesDataPoint
 from utils.square_api import get_square_summary
 from utils.openai_api import generate_promotions
@@ -37,12 +38,19 @@ class PromotionViewSet(viewsets.ModelViewSet):
 
         if type_param == 'suggestions':
             if not business:
-                return PromotionSuggestion.objects.none()
+                return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
             
-            return PromotionSuggestion.objects.filter(business=business).order_by("-created_at")
+            # Only return non-dismissed suggestions by default
+            show_dismissed = self.request.query_params.get('show_dismissed', 'false')
+            queryset = PromotionSuggestion.objects.filter(business=business)
+
+            if not show_dismissed:
+                queryset = queryset.filter(is_dismissed=False)
+            
+            return queryset.order_by("-created_at")
         else:
             if not business:
-                return Promotion.objects.none()
+                return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
             
             return Promotion.objects.filter(business=business).order_by("-created_at")
         
@@ -99,9 +107,27 @@ class PromotionViewSet(viewsets.ModelViewSet):
         if not business:
             return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
         
+        # Get the suggestion ID from which the promotion is being created
+        suggestion_id = request.data.get('suggestion_id')
+        product_names = None
+
+        # If creating from a suggestion, get product names from it
+        if suggestion_id:
+            try:
+                suggestion = PromotionSuggestion.objects.get(id=suggestion_id, business=business)
+                product_names = suggestion.product_names
+            except PromotionSuggestion.DoesNotExist:
+                pass
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(business=business)
+
+        # Save with product names if available
+        if product_names:
+            serializer.save(business=business, product_names=product_names)
+        else:
+            serializer.save(business=business)
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     def update(self, request, *args, **kwargs):
@@ -116,6 +142,26 @@ class PromotionViewSet(viewsets.ModelViewSet):
         serializer.save()
         
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def dismiss(self, request, pk=None):
+        """Dismiss a suggestion with optional feedback"""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            suggestion = PromotionSuggestion.objects.get(pk=pk, business=business)
+        except PromotionSuggestion.DoesNotExist:
+            return Response({"error": "Suggestion not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        suggestion.is_dismissed = True
+        suggestion.feedback = request.data.get('feedback')
+        suggestion.save()
+
+        # TODO
+
+        return Response({"message": "Suggestion dismissed successfully"}, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['post'])
     def generate(self, request):
@@ -146,8 +192,11 @@ class PromotionViewSet(viewsets.ModelViewSet):
             for suggestion in suggestions_data:
                 suggestion_instance = PromotionSuggestion(
                     business=business,
-                    title=suggestion['title'],
-                    description=suggestion['description'],
+                    title=suggestion.get('title'),
+                    description=suggestion.get('description'),
+                    product_names=suggestion.get('product_name'),
+                    data_start_date=products_performance.get('start_date'),
+                    data_end_date=products_performance.get('end_date'),
                 )
                 suggestion_instances.append(suggestion_instance)
 

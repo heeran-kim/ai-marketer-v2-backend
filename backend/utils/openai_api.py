@@ -46,7 +46,7 @@ def generate_promotions(payload):
     Products Performance: {products_performance}
     """
 
-    logger.info(prompt)
+    logger.debug(prompt)
 
     # Construct the input for the API
     input_data = [
