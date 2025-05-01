@@ -2,7 +2,14 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from utils.openai_api import generate_captions
+from utils.discord_api import upload_image_file_to_discord, delete_discord_message
+from businesses.models import Business
+import json
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -54,65 +61,66 @@ def analyse_image(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-@parser_classes([JSONParser])
+@parser_classes([MultiPartParser, JSONParser])
 def generate_caption(request):
     """
-    Generate AI-powered captions based on detected food items (Mock Data).
-
-    **Expected Request:**
-    - Content-Type: `application/json`
-    - Required Fields:
-        - `detected_items` (`list[str]`): List of food items detected in the image.
-        - `business_info` (`dict`, optional): Additional details about the business.
-        - `post_categories` (`list[str]`, optional): Categories related to the post.
-        - `platform_states` (`dict`, optional): Information about which platforms the post will be published on.
-        - `custom_text` (`str`, optional): Additional prompt to fine-tune the AI-generated caption.
-
-    **Example Request (cURL):**
-    ```
-    curl -X POST http://localhost:8000/api/ai/captions/generate/ \
-         -H "Authorization: Bearer <ACCESS_TOKEN>" \
-         -H "Content-Type: application/json" \
-         -d '{
-                "detected_items": ["Steak", "Garlic", "Lemon"],
-                "business_info": {"name": "Gourmet Steakhouse"},
-                "post_categories": ["Food", "Fine Dining"],
-                "platform_states": {"instagram": true, "facebook": false},
-                "custom_text": "Luxury dining experience."
-             }'
-    ```
-
-    **Expected Response:**
-    - Status: `200 OK`
-    - Content-Type: `application/json`
-    - JSON Response Format:
-    ```json
-    {
-        "captions": [
-            "🔥 New Menu Alert! 🔥\nExperience the perfect balance of smoky grilled steak, fresh herbs, and a zesty lemon kick. 🍋🥩",
-            "Indulge in perfection. 🥩✨\nJuicy, tender, and grilled to perfection – our newest menu item is here to elevate your dining experience."
-        ]
-    }
-    ```
-    - `captions`: `list[str]` – List of AI-generated captions.
-
-    **TODO:**
-    - Replace Mock Data with actual AI model integration.
+    Generate AI-powered captions
     """
+    data = request.data.copy()
 
-    # Simulating AI caption generation time (Mock)
-    time.sleep(1.5)
+    image_file = request.FILES.get('image')
 
-    # Mocked AI-generated captions (Replace with actual AI model output)
-    MOCK_GENERATED_CAPTIONS = [
-        "🔥 New Menu Alert! 🔥\nExperience the perfect balance of smoky grilled steak, fresh herbs, and a zesty lemon kick. 🍋🥩 Our new menu is designed for true food lovers who crave bold flavors in a cozy, premium dining atmosphere. 🍷✨\n📍 Available now – tag your foodie friends and come try it! #NewMenu #SteakLover #PremiumDining",
-        "Indulge in perfection. 🥩✨\nJuicy, tender, and grilled to perfection – our newest menu item is here to elevate your dining experience. A hint of garlic, fresh herbs, and a citrus twist make every bite unforgettable. 🍋🔥\nTag someone who needs to try this! #FoodieHeaven #SteakGoals #NewMenu",
-        "New menu, who dis? 🥩🔥\nCrispy sear, juicy center, and that zesty lemon-garlic hit. You know you want it. 🍋💥\nPull up. #NewMenu #SteakDoneRight",
-        "👀 Can you smell that? That’s the sound of your next favorite meal sizzling to perfection! 🥩🔥\nGarlic, herbs, and a squeeze of fresh lemon—simple, yet unforgettable. 🍋✨\nDrop a 🔥 in the comments if you’re craving this right now! #FoodieLife #SteakPerfection #NewOnTheMenu",
-        "✨ A new flavor experience awaits! ✨\nOur latest menu addition combines the rich, smoky taste of perfectly grilled steak with a refreshing citrus twist and aromatic herbs. 🍽️ Whether you're here for a casual night out or a premium dining experience, this one’s for you! 🍷\nCome taste the difference. Reservations recommended! #NewMenu #SteakLover #DiningExperience"
-    ];
+    categories = json.loads(data.get("categories", []))
+    business_info = json.loads(data.get("business_info", {}))
+    item_info = json.loads(data.get("item_info", []))
+    detected_items = json.loads(data.get("detected_items", "[]"))
+    
+    additional_prompt = data.get("additional_prompt", "")
+    include_sales_data = data.get("include_sales_data", 'false').lower() == 'true'
+
+    try:
+        business = Business.objects.get(owner=request.user)
+        business_info["name"] = business.name
+        business_info["type"] = business.category
+    except Business.DoesNotExist:
+        return Response({"error": "Business not found"}, status=404)
+
+    image_url = None
+    message_id = None
+    # Upload image to Discord if provided
+    if image_file:
+        logger.debug("Uploading image to Discord for caption generation.")
+        try:
+            upload_result = upload_image_file_to_discord(image_file)
+        except Exception as e:
+            logger.error(f"Error uploading image to Discord: {str(e)}", exc_info=True)
+            return Response({"error": "Failed to upload image to Discord"}, status=500)
+        
+        image_url = upload_result.get("image_url")
+        message_id = upload_result.get("message_id")
+        logger.debug(f"Image uploaded to Discord: {image_url}")
+
+    try:
+        captions = generate_captions(
+            categories=categories,
+            business_info=business_info,
+            item_info=item_info,
+            additional_prompt=additional_prompt,
+            include_sales_data=include_sales_data,
+            detected_items=detected_items,
+            image_url=image_url,
+        )
+        return Response({"captions": captions}, status=200)
+    except Exception as e:
+        logger.error(f"Error generating captions: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
+    finally:
+        if message_id:
+            logger.debug("Deleting uploaded image from Discord.")
+            delete_success = delete_discord_message(message_id)
+            if delete_success:
+                logger.debug("Image deleted from Discord successfully.")
+            else:
+                logger.error("Failed to delete image from Discord.")
 
 
-    return Response({
-        "captions": MOCK_GENERATED_CAPTIONS
-    })

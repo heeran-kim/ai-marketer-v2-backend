@@ -36,6 +36,43 @@ TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 if not TWOFA_ENCRYPTION_KEY:
     raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
 
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
+if not FACEBOOK_APP_ID:
+    raise ValueError("FACEBOOK_APP_ID environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
+if not FACEBOOK_SECRET:
+    raise ValueError("FACEBOOK_SECRET environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+if not FACEBOOK_REDIRECT_URI:
+    raise ValueError("FACEBOOK_REDIRECT_URI environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+SQUARE_ENV = os.getenv("SQUARE_ENV", "sandbox")
+if SQUARE_ENV == "sandbox":
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_SANDBOX")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_SANDBOX")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_SANDBOX")
+else:
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_PROD")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_PROD")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_PROD")
+
+if not SQUARE_APP_ID:
+    raise ValueError("SQUARE_APP_ID environment variable is not set.")
+
+if not SQUARE_APP_SECRET:
+    raise ValueError("SQUARE_APP_SECRET environment variable is not set.")
+
+SQUARE_REDIRECT_URI = os.getenv("SQUARE_REDIRECT_URI")
+if not SQUARE_REDIRECT_URI:
+    raise ValueError("SQUARE_REDIRECT_URI environment variable is not set.")
+
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL")
+if not FRONTEND_BASE_URL:
+    raise ValueError("FRONTEND_BASE_URL environment variable is not set.")
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = [
@@ -82,17 +119,18 @@ SIMPLE_JWT = {
 }
 
 SESSION_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
+SESSION_COOKIE_SAMESITE = "None"
 
 # CSRF Settings
 CSRF_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
 CSRF_COOKIE_DOMAIN = None 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "https://localhost:3000,https://127.0.0.1:3000").split(",")
 
 # CORS Settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000"
+    "https://localhost:3000,https://127.0.0.1:3000,https://ai-marketer-v2-frontend.vercel.app"
 ).split(",")
 
 # DRF Default Authentication Settings
@@ -153,7 +191,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-
 # Django Admin & Template Setting
 ROOT_URLCONF = "backend.urls"
 TEMPLATES = [
@@ -176,12 +213,17 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
+    if os.getenv("USE_RENDER_DB") == "true"
+    else {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB"),
+        "USER": os.getenv("POSTGRES_USER"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+        "HOST": os.getenv("POSTGRES_HOST"),
+        "PORT": os.getenv("POSTGRES_PORT"),
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -262,24 +304,3 @@ LOGGING = {
         },
     },
 }
-
-# In config/settings.py
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-
-# EMAIL_HOST_USER = 'drishtimadaan9@gmail.com'
-# EMAIL_HOST_PASSWORD = 'wlxo dsro mjgm ghdx'
-
-# DEFAULT_FROM_EMAIL = 'AI Marketer <drishtimadaan9@gmail.com>'
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-
-EMAIL_HOST_USER = 'akastudioaimarketer@gmail.com'
-EMAIL_HOST_PASSWORD = 'sibo nkqr khpp yxwr'
-DEFAULT_FROM_EMAIL = 'AI Marketer <akastudioaimarketer@gmail.com>'
