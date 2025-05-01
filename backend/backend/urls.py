@@ -20,7 +20,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-
+from users.views import test_email
 def health_check(request):
     return JsonResponse({"status": "ok"})
 
@@ -39,6 +39,7 @@ urlpatterns = [
     path("api/promotions/", include("promotions.urls")),
     path("api/ai/", include("ai.urls")),
     path("api/sales/", include('sales.urls')),
+    path('api/test-email/', test_email, name='test_email'),
 ]
 
 if settings.DEBUG:

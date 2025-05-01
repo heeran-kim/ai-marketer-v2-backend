@@ -13,4 +13,5 @@ urlpatterns = [
     path('2fa-check/',Check2FA.as_view(),name='check2fa'),
     path('2fa-remove/',Remove2FA.as_view(),name='remove2fa'),
     path('2fa-qr/',Enable2FA.as_view(),name='qr2fa'),
+    
 ]
