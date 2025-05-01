@@ -25,7 +25,7 @@ def generate_promotions(payload):
     [
         {{
             "product_name": [<product_name_1>, <product_name_2>, ...],  # List ALL products mentioned in the description
-            "category": ["discount", "bundle", "social"],  # List ALL categories related to the description
+            "category": ["discount", "bundle", "social"],  // Select ALL applicable categories (not just one).
             "title": <suggestion_title>,
             "description": <suggestion_description>
                 # Clearly state which product is best-selling or low-performing
