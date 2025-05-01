@@ -41,10 +41,12 @@ class PromotionViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
             
             # Only return non-dismissed suggestions by default
-            show_dismissed = self.request.query_params.get('show_dismissed', 'false')
+            show_dismissed = self.request.query_params.get('show_dismissed', 'false').lower() == 'true'
+            logger.info(f"SHOW_DISMISSED: {show_dismissed}")
             queryset = PromotionSuggestion.objects.filter(business=business)
 
             if not show_dismissed:
+                logger.info(f"SHOW_DISMISSED: {show_dismissed}")
                 queryset = queryset.filter(is_dismissed=False)
             
             return queryset.order_by("-created_at")
