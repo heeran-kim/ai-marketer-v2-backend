@@ -15,8 +15,17 @@ def generate_promotions(payload):
 
     products_performance = payload['products_performance']
     context_data = payload['context_data']
+    feedback_history = payload['feedback_history']
     start_date = products_performance['start_date']
     end_date = products_performance['end_date']
+
+    # Build feedback context if available
+    feedback_context = ""
+    if feedback_history:
+        feedback_context = "\n\nFeedback History (Use this to imporve suggestions):\n"
+        for idx, item in enumerate(feedback_history):
+            product_list = ", ".join(item["product_names"]) if item["product_names"] else "N/A"
+            feedback_context += f"{idx+1}. Products: {product_list} - Feedback: \"{item['feedback']}\"\n"
 
     prompt = f"""
     Based on the provided business context, product performance (from {start_date} to {end_date}), and general consumer insights, generate 3 distinct promotion suggestions for each of the top 10 best-selling and bottom 10 low-performing products (exclude average-performing ones entirely).
@@ -44,9 +53,10 @@ def generate_promotions(payload):
     - Business Vibe: {context_data['vibe']}
 
     Products Performance: {products_performance}
+    {feedback_context}
     """
 
-    logger.debug(prompt)
+    logger.info(prompt)
 
     # Construct the input for the API
     input_data = [
@@ -141,7 +151,7 @@ def generate_captions(
     {f'Additional Context: {additional_prompt}' if additional_prompt else ''}
     """
 
-    logger.info(f"Generated prompt: {prompt}")
+    logger.debug(f"Generated prompt: {prompt}")
 
     # Construct the input for the API
     input_data = [

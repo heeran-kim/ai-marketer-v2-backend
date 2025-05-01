@@ -42,11 +42,9 @@ class PromotionViewSet(viewsets.ModelViewSet):
             
             # Only return non-dismissed suggestions by default
             show_dismissed = self.request.query_params.get('show_dismissed', 'false').lower() == 'true'
-            logger.info(f"SHOW_DISMISSED: {show_dismissed}")
             queryset = PromotionSuggestion.objects.filter(business=business)
 
             if not show_dismissed:
-                logger.info(f"SHOW_DISMISSED: {show_dismissed}")
                 queryset = queryset.filter(is_dismissed=False)
             
             return queryset.order_by("-created_at")
@@ -154,11 +152,11 @@ class PromotionViewSet(viewsets.ModelViewSet):
         except PromotionSuggestion.DoesNotExist:
             return Response({"error": "Suggestion not found"}, status=status.HTTP_404_NOT_FOUND)
         
+        # Store the feedback
+        feedback_text = request.data.get('feedback', '')
         suggestion.is_dismissed = True
-        suggestion.feedback = request.data.get('feedback')
+        suggestion.feedback = feedback_text
         suggestion.save()
-
-        # TODO
 
         return Response({"message": "Suggestion dismissed successfully"}, status=status.HTTP_200_OK)
     
@@ -168,6 +166,9 @@ class PromotionViewSet(viewsets.ModelViewSet):
         business = Business.objects.filter(owner=request.user).first()
         if not business:
             return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Auto-archive old suggestions to ensure there's room for new ones
+        self._auto_archive_suggestions(business)
 
         # Fetching performance and pricing data
         products_performance = self._get_products_performance(business)
@@ -177,10 +178,12 @@ class PromotionViewSet(viewsets.ModelViewSet):
             "target_customers": business.target_customers,
             "vibe": business.vibe
         }
+        feedback_context = self._get_feedback_context(business)
 
         ai_input_payload= {
             "products_performance": products_performance,
-            "context_data": context_data
+            "context_data": context_data,
+            "feedback_history": feedback_context
         }
 
         try:
@@ -220,6 +223,39 @@ class PromotionViewSet(viewsets.ModelViewSet):
             logger.error(f"Error generating promotion suggestions: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def _auto_archive_suggestions(self, business, days=30, max_active_count = 5):
+        start_date = datetime.now(timezone('UTC')) - timedelta(days)
+        old_suggestions = PromotionSuggestion.objects.filter(
+            business=business,
+            is_dismissed=False,
+            created_at__lt=start_date
+        )
+
+        if old_suggestions.exists():
+            old_suggestions.update(
+                is_dismissed=True,
+                feedback="Auto-archived due to age"
+            )
+        
+        current_active_count = PromotionSuggestion.objects.filter(
+            business=business,
+            is_dismissed=False
+        ).count()
+
+        if current_active_count > max_active_count:
+            to_keep = max_active_count
+            to_archive = current_active_count - to_keep
+
+            if to_archive > 0:
+                oldest_suggestions = PromotionSuggestion.objects.filter(
+                    business=business,
+                    is_dismissed=False
+                ).order_by('created_at')[:to_archive]
+
+                oldest_suggestions.update(
+                    is_dismissed=True,
+                    feedback="Auto-archived to make room for new suggestions"
+                )
 
     def _get_products_performance(self, business, days=30):
         """
@@ -232,7 +268,7 @@ class PromotionViewSet(viewsets.ModelViewSet):
         square_data = get_square_summary(business)
 
         # Calculate the date range
-        start_date = (datetime.now(timezone('UTC')) - timedelta(days))
+        start_date = datetime.now(timezone('UTC')) - timedelta(days)
         end_date = datetime.now(timezone('UTC'))
 
         # Filter the sales data based on the given date range
@@ -324,5 +360,18 @@ class PromotionViewSet(viewsets.ModelViewSet):
             return 'downward'
         
         return 'flat'
+    
+    def _get_feedback_context(self, business):
+        recent_dismissed = PromotionSuggestion.objects.filter(business=business, is_dismissed=True).exclude(feedback=None).exclude(feedback='').exclude(feedback__startswith="Auto-archived").order_by('-created_at')[:5]
 
+        feedback_context = []
+        if recent_dismissed.exists():
+            for dismissed in recent_dismissed:
+                if dismissed.product_names and dismissed.feedback:
+                    feedback_context.append({
+                        'product_names': dismissed.product_names,
+                        'feedback': dismissed.feedback
+                    })
+
+        return feedback_context
     
