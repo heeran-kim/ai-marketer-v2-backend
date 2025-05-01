@@ -109,25 +109,22 @@ class PromotionViewSet(viewsets.ModelViewSet):
         
         # Get the suggestion ID from which the promotion is being created
         suggestion_id = request.data.get('suggestion_id')
-        product_names = None
 
         # If creating from a suggestion, get product names from it
         if suggestion_id:
             try:
                 suggestion = PromotionSuggestion.objects.get(id=suggestion_id, business=business)
-                product_names = suggestion.product_names
+                serializer = self.get_serializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
+                serializer.save(business=business, product_names=suggestion.product_names)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
             except PromotionSuggestion.DoesNotExist:
                 pass
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        # Save with product names if available
-        if product_names:
-            serializer.save(business=business, product_names=product_names)
-        else:
-            serializer.save(business=business)
-
+        serializer.save(business=business)
+        
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     def update(self, request, *args, **kwargs):
