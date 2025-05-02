@@ -21,6 +21,9 @@ import io
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from datetime import datetime, timedelta
+from config.celeryTasks import test_scheduled_task
+
 from django.core.files import File
 
 from cryptography.fernet import Fernet #cryptography package
@@ -573,10 +576,61 @@ class PostDetailView(APIView):
             return post, None
         except Post.DoesNotExist:
             return None, Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+    def get_meta_comments(self,user,platform):
+        #Get Access Token
+        token_decoded = self.get_user_access_token(user)
+        #Get Facebook page id
+        facebookPageID=self.get_facebook_page_id(token_decoded)
+        if not facebookPageID:
+            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+        
+        #For Facebook
+        if platform == 'facebook':
+            #Get page access token
+            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+            metasData = response.json()
+            if not metasData.get("data"):
+                return {"error": "Unable to retrieve page access token 2", "status": False}
+            #Get the page access token
+            page_access_token = metasData.get("data")[0]["access_token"]
+            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,comments.summary(true)&access_token={page_access_token}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to fetch posts. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("data"):
+                return {"error": f"Unable to retrieve posts {response.text}", "status": False}
+            posts_data = media_data.get("data")
+            return {"message": posts_data, "status": True}
+        
+    def get_facebook_page_id(self,access_token):
+        #Retrieve facebook page id data from Meta's API
+        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={access_token}'
+        response = requests.get(url)
+        #return Response({'message':response,'access_token':access_token,'status':status.HTTP_200_OK})
+        if response.status_code != 200:
+            # Handle error response    
+            return None
+        metasData = response.json()
+        if not metasData.get("data"):
+            return None
+        #else return the page id
+        return metasData.get("data")[0]["id"]
 
     def get(self, request, pk):
         """Retrieve a specific post"""
         post, error_response = self.get_post(pk, request.user)
+        if 'comments' in request.path:
+            run_time = datetime.now() + timedelta(seconds=5)  # 30 seconds from now
+            test_scheduled_task.apply_async(eta=run_time)
+            logger.error("Sent to celery")
+            return Response({"message": self.get_meta_comments(request.user,post.platform.platform)}, status=200)
         if error_response:
             return error_response
 
