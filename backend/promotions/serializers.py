@@ -16,6 +16,7 @@ class PromotionSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField(read_only=True)
     end_date = serializers.DateField(required=False, allow_null=True)
     product_names = serializers.JSONField(required=False, allow_null=True)
+    products = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Promotion
@@ -30,6 +31,7 @@ class PromotionSerializer(serializers.ModelSerializer):
             "status",
             "sold_count",
             "product_names",
+            "products",
         ]
 
     def get_categories(self, obj):
@@ -41,6 +43,17 @@ class PromotionSerializer(serializers.ModelSerializer):
     def get_posts(self, obj):
         posts = obj.posts.all()
         return PostSerializer(posts, many=True, context=self.context).data
+
+    def get_products(self, obj):
+        # Return products with categories if product_data is available
+        if hasattr(obj, 'product_data') and obj.product_data:
+            return obj.product_data
+        
+        # Otherwise, convert from product_names (backward compatibility)
+        elif obj.product_names:
+            return [{'name': name, 'category': 'average'} for name in obj.product_names]
+        
+        return []
     
     # Calculate status dynamically based on current time vs. promotion dates
     def get_status(self, obj):
@@ -64,6 +77,7 @@ class PromotionSerializer(serializers.ModelSerializer):
 class SuggestionSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
     product_names = serializers.JSONField(required=False, allow_null=True)
+    products = serializers.SerializerMethodField(read_only=True)
     data_period = serializers.SerializerMethodField()
 
     class Meta:
@@ -74,6 +88,7 @@ class SuggestionSerializer(serializers.ModelSerializer):
             "categories",
             "description",
             "product_names",
+            "products",
             "data_period",
             "is_dismissed",
         ]
@@ -83,6 +98,17 @@ class SuggestionSerializer(serializers.ModelSerializer):
             {"id": category.id, "key": category.key, "label": category.label} 
             for category in obj.categories.all()
         ]
+    
+    def get_products(self, obj):
+        # Return products with categories if product_data is available
+        if hasattr(obj, 'product_data') and obj.product_data:
+            return obj.product_data
+        
+        # Otherwise, convert from product_names (backward compatibility)
+        elif obj.product_names:
+            return [{'name': name, 'category': 'average'} for name in obj.product_names]
+        
+        return []
     
     def get_data_period(self, obj):
         """Format date range used for generating suggestion"""

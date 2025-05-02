@@ -116,7 +116,7 @@ class PromotionViewSet(viewsets.ModelViewSet):
                 suggestion = PromotionSuggestion.objects.get(id=suggestion_id, business=business)
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
-                serializer.save(business=business, product_names=suggestion.product_names)
+                serializer.save(business=business, product_names=suggestion.product_names, product_data=suggestion.product_data)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             except PromotionSuggestion.DoesNotExist:
                 pass
@@ -192,11 +192,30 @@ class PromotionViewSet(viewsets.ModelViewSet):
 
             suggestion_instances = []
             for suggestion in suggestions_data:
+                product_names = suggestion.get('product_name', [])
+                products_with_categories = []
+                for product_name in product_names:
+                    product_info = next(
+                        (p for p in products_performance['products'] if p['product_name'] == product_name), 
+                        None
+                    )
+                    if product_info:
+                        products_with_categories.append({
+                            'name': product_name,
+                            'category': product_info['category']
+                        })
+                    else:
+                        products_with_categories.append({
+                            'name': product_name,
+                            'category': 'average'
+                        })
+
                 suggestion_instance = PromotionSuggestion(
                     business=business,
                     title=suggestion.get('title'),
                     description=suggestion.get('description'),
-                    product_names=suggestion.get('product_name'),
+                    product_names=product_names,
+                    product_data=products_with_categories,
                     data_start_date=products_performance.get('start_date'),
                     data_end_date=products_performance.get('end_date'),
                 )

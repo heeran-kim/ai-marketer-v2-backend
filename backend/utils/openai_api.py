@@ -56,7 +56,7 @@ def generate_promotions(payload):
     {feedback_context}
     """
 
-    logger.info(prompt)
+    logger.debug(prompt)
 
     # Construct the input for the API
     input_data = [
