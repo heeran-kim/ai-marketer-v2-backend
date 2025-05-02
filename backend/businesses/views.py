@@ -7,7 +7,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from sales.models import SalesDataPoint
 from config import settings
-from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, format_square_item
+from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
@@ -335,7 +335,7 @@ class SquareViewSet(viewsets.ViewSet):
             items = []
             if items_response.is_success():
                 for obj in items_response.body.get("objects", []):
-                    item = format_square_item(obj)
+                    item = process_square_item(obj, output_format="detail")
                     if item:
                         items.append(item)
             

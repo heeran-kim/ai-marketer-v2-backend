@@ -8,7 +8,7 @@ from .models import Promotion, PromotionCategories, PromotionSuggestion
 from .serializers import PromotionSerializer, SuggestionSerializer
 from businesses.models import Business
 from sales.models import SalesDataPoint
-from utils.square_api import get_square_summary
+from utils.square_api import get_square_menu_items
 from utils.openai_api import generate_promotions
 
 from datetime import datetime, timedelta
@@ -285,7 +285,7 @@ class PromotionViewSet(viewsets.ModelViewSet):
         It also evaluates recent sales trends (upward, downward, or flat) for each product using exponential moving average (EMA).
         """
         # Get Square data
-        square_data = get_square_summary(business)
+        square_data = get_square_menu_items(business)
 
         # Calculate the date range
         start_date = datetime.now(timezone('UTC')) - timedelta(days)
