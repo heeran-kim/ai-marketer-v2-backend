@@ -247,15 +247,16 @@ class PromotionViewSet(viewsets.ModelViewSet):
             to_archive = current_active_count - to_keep
 
             if to_archive > 0:
-                oldest_suggestions = PromotionSuggestion.objects.filter(
+                oldest_ids = PromotionSuggestion.objects.filter(
                     business=business,
                     is_dismissed=False
-                ).order_by('created_at')[:to_archive]
+                ).order_by('created_at').values_list('id', flat=True)[:to_archive]
 
-                oldest_suggestions.update(
+                PromotionSuggestion.objects.filter(id__in=oldest_ids).update(
                     is_dismissed=True,
                     feedback="Auto-archived to make room for new suggestions"
                 )
+
 
     def _get_products_performance(self, business, days=30):
         """
