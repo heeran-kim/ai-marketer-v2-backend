@@ -72,6 +72,10 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL")
 if not FRONTEND_BASE_URL:
     raise ValueError("FRONTEND_BASE_URL environment variable is not set.")
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY environment variable is not set.")
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"

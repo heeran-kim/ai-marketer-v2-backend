@@ -17,6 +17,7 @@ router.register(r'', PromotionViewSet, basename='promotion')
 # - GET /{id}/      -> retrieve promotion
 # - PUT /{id}/      -> update promotion
 # - DELETE /{id}/   -> delete promotion
+# - GENERATE        -> generate promotion suggestions
 urlpatterns = [
     path('', include(router.urls)),
 ]
