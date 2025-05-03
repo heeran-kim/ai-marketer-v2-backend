@@ -11,8 +11,7 @@ from django.conf import settings
 import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
-from django.core.mail import send_mail
-import traceback
+
 from cryptography.fernet import Fernet #cryptography package
 
 from django.http import JsonResponse
@@ -256,17 +255,4 @@ class Enable2FA(APIView):
         qr_base64 = base64.b64encode(buffer.getvalue()).decode()  #convert image to Base64
 
         return JsonResponse({"qr_code": f"data:image/png;base64,{qr_base64}"})
-
-def test_email(request):
-    subject = 'Test Email from Django'
-    message = 'This is a test email from your Django application.'
-    from_email = settings.DEFAULT_FROM_EMAIL
-    recipient_list = ['drishti.madaan@griffithuni.edu.au']  # Your email
-    
-    try:
-        send_mail(subject, message, from_email, recipient_list)
-        return HttpResponse("Email sent successfully!")
-    except Exception as e:
-        error_trace = traceback.format_exc()
-        return HttpResponse(f"Failed to send email: {str(e)}<br><pre>{error_trace}</pre>")
 
