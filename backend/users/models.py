@@ -40,32 +40,3 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.name
-
-        
-class EmailConfiguration(models.Model):
-    """Model for storing configurable email backend settings."""
-    
-    name = models.CharField(max_length=100, default="Default Configuration")
-    email_backend = models.CharField(max_length=255, default='django.core.mail.backends.smtp.EmailBackend')
-    email_host = models.CharField(max_length=255)
-    email_port = models.IntegerField(default=587)
-    email_use_tls = models.BooleanField(default=True)
-    email_host_user = models.CharField(max_length=255)
-    email_host_password = models.CharField(max_length=255)
-    default_from_email = models.CharField(max_length=255)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Email Configuration'
-        verbose_name_plural = 'Email Configurations'
-    
-    def save(self, *args, **kwargs):
-        # When a new configuration is made active, deactivate all others
-        if self.is_active:
-            EmailConfiguration.objects.exclude(pk=self.pk).update(is_active=False)
-        super().save(*args, **kwargs)
-    
-    def __str__(self):
-        return f"{self.name} ({self.email_host_user})"
