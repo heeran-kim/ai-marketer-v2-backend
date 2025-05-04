@@ -22,11 +22,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from datetime import datetime, timedelta
-from config.celeryTasks import test_scheduled_task
+from config.celeryTasks import publish_to_meta_task,publishToMeta
 
 from django.core.files import File
 
 from cryptography.fernet import Fernet #cryptography package
+from django.db.models import Q,Count
 
 TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
@@ -123,7 +124,25 @@ class PostListCreateView(ListCreateAPIView):
         )
 
         for post in posts_not_in_links:
-            post.delete()
+            if(post.status!="Scheduled"):
+                post.delete()
+
+        #Collect Duplicates and delete scheduled post in replacement of published one
+        duplicates = (
+            Post.objects
+            .values('caption', 'scheduled_at')
+            .annotate(dupe_count=Count('id'))
+            .filter(dupe_count__gt=1)
+        )
+        q_filter = Q()
+        for entry in duplicates:
+            q_filter |= Q(caption=entry['caption'], scheduled_at=entry['scheduled_at'])
+
+        posts_with_same_caption_and_time = Post.objects.filter(q_filter)
+
+        for post in posts_with_same_caption_and_time:
+            if(post.status=="Scheduled"):
+                post.delete()
         
     def meta_get_function(self, business, platform):
         #Save posts to the database
@@ -284,18 +303,24 @@ class PostListCreateView(ListCreateAPIView):
         token_decrypted=f.decrypt(token)
         token_decoded=token_decrypted.decode()
         return token_decoded
-    
-    def publishToMeta(self, platform, caption, image_file, user,aspectRatio,scheduled_at=None):
-        token_decoded = self.get_user_access_token(user)
 
-        facebookPageID=self.get_facebook_page_id(token_decoded)
-        if not facebookPageID:
-            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def perform_create(self, serializer):
+        # TODO
+        business = Business.objects.filter(owner=self.request.user).first()
+        serializer.save(business=business)
+
+    def upload_image_file(self,image_file,aspectRatio):
         #Get Image setup
         headers = {
             'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
         }
+
         #image_file.file.seek(0)
         img = Image.open(image_file)
         if(aspectRatio == "1/1"):
@@ -315,124 +340,7 @@ class PostListCreateView(ListCreateAPIView):
         if response.status_code != 200:
             return {"error": f"Unable to upload to Imgur | text:{response.text}", "status": False}
         image_url = response.json()['data']['link']
-        alt_text="This is the alt text for the image"
-
-        #For Facebook
-        if platform == 'facebook':
-            #Get page access token
-            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
-            response = requests.get(url)
-            if response.status_code != 200:
-                # Handle error response
-                return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
-            metasData = response.json()
-            if not metasData.get("data"):
-                return {"error": "Unable to retrieve page access token 2", "status": False}
-            #Get the page access token
-            page_access_token = metasData.get("data")[0]["access_token"]
-            # Create media object for Facebook
-            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/photos'
-            data = {
-                "url": image_url,
-                "message": caption,
-                "access_token": page_access_token
-            }
-            # if scheduled_at:
-            #     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-            #     unix_timestamp = int(dt.timestamp())
-            #     data.update({"published": 'false',"scheduled_publish_time": unix_timestamp})
-
-            response = requests.post(url, data=data)
-            if response.status_code != 200:
-                # Handle error response
-                return {"error": f"Unable to create Media Obj for Facebook. {response.text}", "status": False}
-            media_data = response.json()
-            if not media_data.get("post_id"):
-                return {"error": "Unable to retrieve post ID", "status": False}
-            post_id = media_data.get("post_id")
-
-            if scheduled_at:
-                return {"message": f'{post_id}', "status": True}
-
-            #Get URL to the post
-            url = f'https://graph.facebook.com/v22.0/{post_id}?fields=permalink_url&access_token={page_access_token}'
-            response = requests.get(url)
-            if response.status_code != 200:
-                # Handle error response
-                return {"error": "Unable to get post url", "status": False}
-            post_data = response.json()
-            if not post_data.get("permalink_url"):
-                return {"error": "Unable to retrieve post url from json", "status": False}
-            post_url = post_data.get("permalink_url")
-            
-            return {"message": post_url, "status": True}
-
-        #For Instagram
-        #Create media object
-        # Get the Instagram account ID
-        instagram_account_id = self.returnInstagramDetails(facebookPageID,token_decoded)
-        if not instagram_account_id:    
-            return {"error": "Unable to retrieve Insta ID", "status": False}
-        
-        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media'
-        data = {
-            "image_url": image_url,
-            "caption": caption,
-            "alt_text": alt_text,
-            "access_token": token_decoded
-        }
-
-        # if scheduled_at:
-        #     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-        #     unix_timestamp = int(dt.timestamp())
-        #     data.update({"publish_at": unix_timestamp})
-
-        response = requests.post(url, data=data)
-        if response.status_code != 200:
-            # Handle error response
-            return {"error": f"Unable to create Media Obj.", "status": False}
-        media_data = response.json()
-        if not media_data.get("id"):
-            return {"error": "Unable to retrieve media ID", "status": False}
-        media_id = media_data.get("id")
-
-        if scheduled_at:
-            return {"message": f'{media_id}', "status": True}
-
-        #Publish the media object
-        url = f'https://graph.facebook.com/v22.0/{instagram_account_id}/media_publish?creation_id={media_id}&access_token={token_decoded}'
-        response = requests.post(url)
-        if response.status_code != 200:
-            # Handle error response
-            return {"error": "Unable to publish media obj", "status": False}
-        publish_data = response.json()
-        if not publish_data.get("id"):
-            return {"error": "Unable to retrieve publish ID", "status": False}
-        post_id = publish_data.get("id")
-        #Get the link to the post
-        url = f'https://graph.facebook.com/v22.0/{post_id}?fields=permalink&access_token={token_decoded}'
-        response = requests.get(url)
-        if response.status_code != 200:
-            # Handle error response
-            return {"error": "Unable to get post url", "status": False}
-        post_data = response.json()
-        if not post_data.get("permalink"):
-            return {"error": "Unable to retrieve post url from json", "status": False}
-        post_url = post_data.get("permalink")
-        # Return the post ID
-        return {"message": post_url, "status": True}
-
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_create(self, serializer):
-        # TODO
-        business = Business.objects.filter(owner=self.request.user).first()
-        serializer.save(business=business)
+        return image_url
 
     def get(self, request, *args, **kwargs):
         if request.query_params.get('create') == 'true':
@@ -521,18 +429,34 @@ class PostListCreateView(ListCreateAPIView):
             link = "test.com"
             post_status = "Published"
 
+        image_url=self.upload_image_file(request.FILES.get('image'),data.get("aspect_ratio","4/5"))
+        access_token=self.get_user_access_token(request.user)
+
         match data["platform"]:
             case 'facebook':
-                response = self.publishToMeta('facebook',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
-                if (response.get("status") == False):
-                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
-                link=response.get("message")
-                #return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
+                #Schedule post
+                if scheduled_at:
+                    dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+                    publish_to_meta_task.apply_async(args=["facebook", data.get("caption", ""),image_url,access_token],eta=dt)
+                    link="Not published yet!"
+                #Else post straight away
+                else:
+                    response = publishToMeta("facebook", data.get("caption", ""),image_url,access_token)
+                    if (response.get("status") == False):
+                        return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                    link=response.get("message")
             case 'instagram':
-                response = self.publishToMeta('instagram',data.get("caption", ""),request.FILES.get('image'), request.user, data.get("aspect_ratio","4/5"),scheduled_at)
-                if (response.get("status") == False):
-                    return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
-                link=response.get("message")
+                #Schedule post
+                if scheduled_at:
+                    dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+                    publish_to_meta_task.apply_async(args=["instagram", data.get("caption", ""),image_url,access_token],eta=dt)
+                    link="Not published yet!"
+                #Else post straight away
+                else:
+                    response = publishToMeta("instagram", data.get("caption", ""),image_url,access_token)
+                    if (response.get("status") == False):
+                        return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                    link=response.get("message")
             case 'twitter':
                 return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
             case _:
@@ -627,9 +551,6 @@ class PostDetailView(APIView):
         """Retrieve a specific post"""
         post, error_response = self.get_post(pk, request.user)
         if 'comments' in request.path:
-            run_time = datetime.now() + timedelta(seconds=5)  # 30 seconds from now
-            test_scheduled_task.apply_async(eta=run_time)
-            logger.error("Sent to celery")
             return Response({"message": self.get_meta_comments(request.user,post.platform.platform)}, status=200)
         if error_response:
             return error_response
