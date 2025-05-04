@@ -1,3 +1,4 @@
+# backend/utils/square_api.py
 from sales.models import SalesDataPoint
 from config import settings
 from businesses.serializers import SquareItemSerializer
@@ -13,29 +14,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_square_summary(business):
-    """
-    Fetch summary data from Square API for a given business.
-    """
-    result = {
-        "square_connected": False,
-        "items": [],
-    }
-
-    client = get_square_client(business)
-    locations = get_square_locations(client)    
-    if locations:
-        result["square_connected"] = True
-    
-    items = get_square_items(client)
-    if items:
-        result["items"] = {
-            item["name"].lower(): item["description_with_price"]
-            for item in reformat_square_items(items)
-        }
-
-    return result
-    
 def get_square_client(business):
     """Initialize Square client from business token."""
     access_token = business.square_access_token
@@ -77,43 +55,138 @@ def get_square_items(client):
         logger.error(f"Square items fetch error: {e}")
     return []
 
-def reformat_square_items(items):
+def process_square_item(item, output_format="detail"):
     """
-    Reformat Square items to a more usable format using serializers.
-    Args:
-        items (list): List of items from Square API.
-    Returns:
-        list: Reformatted list of items.
-    """
-    reformatted_items = []
-    for item in items:
-        if item.get("type") == "ITEM" and "item_data" in item:
-            item_data = item["item_data"]
-            
-            variations = []
-            for variation in item_data.get("variations", []):
-                if "item_variation_data" in variation:
-                    var_data = variation["item_variation_data"]
-                    price_cents = var_data.get("price_money", {}).get("amount", 0)
-                    variations.append({
-                        "name": var_data.get("name", ""),
-                        "price_cents": price_cents
-                    })
-            
-            serializer = SquareItemSerializer(data={
-                "name": item_data.get("name", ""),
-                "description": item_data.get("description", ""),
-                "variations": variations
-            })
-            
-            if serializer.is_valid():
-                reformatted_item = serializer.data
-                logger.debug(f"Item: {item_data.get('name')}, Variations: {variations}, Formatted: {reformatted_item.get('description_with_price')}")
-                reformatted_items.append(reformatted_item)
-            else:
-                logger.warning(f"Error with {item_data.get('name')}: {serializer.errors}")
+    Process a Square catalog item with flexible output formats.
     
-    return reformatted_items
+    Args:
+        item: Square catalog item data
+        output_format: 
+            - "detail": Complete details with IDs (for API responses)
+            - "display": Formatted for display with pricing details
+            - "summary": Simple name->description mapping
+    
+    Returns:
+        Processed item in requested format or None if invalid
+    """
+    if not item or item.get("type") != "ITEM" or "item_data" not in item:
+        return None
+    
+    item_data = item["item_data"]
+    item_name = item_data.get("name", "")
+    item_description = item_data.get("description", "")
+    
+    # Process variations consistently
+    variations = []
+    for variation in item_data.get("variations", []):
+        if "item_variation_data" not in variation:
+            continue
+            
+        var_data = variation["item_variation_data"]
+        price_money = var_data.get("price_money", {})
+        price_cents = price_money.get("amount", 0)
+        
+        # Ensure variation name is never blank
+        var_name = var_data.get("name", "").strip() or "Default"
+        
+        var_info = {
+            "name": var_name,
+            "price_cents": price_cents,
+            "price_money": price_money
+        }
+        
+        # Include ID only for detail format
+        if output_format == "detail":
+            var_info["id"] = variation["id"]
+            
+        variations.append(var_info)
+    
+    # Skip items without valid variations
+    if not variations:
+        return None
+    
+    # Return data based on requested format
+    if output_format == "summary":
+        # Create price description string
+        price_descriptions = []
+        for variation in variations:
+            price = variation["price_cents"]
+            currency = variation["price_money"].get("currency", "USD")
+            
+            price_str = f"${price/100:.2f}" if currency == "USD" else f"{price/100:.2f} {currency}"
+            if variation["name"] != "Default":
+                price_descriptions.append(f"{variation['name']}: {price_str}")
+            else:
+                price_descriptions.append(price_str)
+        
+        price_text = ", ".join(price_descriptions)
+        description = f"[{price_text}] {item_description}" if item_description else f"[{price_text}]"
+        
+        # Return mapping from lowercase name to description
+        return {item_name.lower(): description}
+        
+    elif output_format == "display":
+        # Use serializer for display formatting
+        serializer_data = {
+            "name": item_name,
+            "description": item_description,
+            "variations": [
+                {"name": v["name"], "price_cents": v["price_cents"]} 
+                for v in variations
+            ]
+        }
+        
+        serializer = SquareItemSerializer(data=serializer_data)
+        if serializer.is_valid():
+            return serializer.data
+        else:
+            logger.warning(f"Error with {item_name}: {serializer.errors}")
+            return None
+            
+    else:  # "detail" format - full API response
+        categories = [cat.get("id") for cat in item_data.get("categories", []) if "id" in cat]
+        
+        return {
+            "id": item["id"],
+            "name": item_name,
+            "description": item_description,
+            "variations": variations,
+            "categories": categories
+        }
+
+def get_square_menu_items(business):
+    """
+    Get processed Square menu items with prices and descriptions.
+    
+    Returns:
+        dict: {
+            "square_connected": bool,
+            "items": {item_name: description_with_price, ...}
+        }
+    """
+    client = get_square_client(business)
+    if client is None:
+        return {"square_connected": False, "items": {}}
+    
+    locations = get_square_locations(client)    
+    if not locations:
+        return {"square_connected": False, "items": {}}
+    
+    items = get_square_items(client)
+    if not items:
+        return {"square_connected": True, "items": {}}
+    
+    # Process items into a name->description mapping
+    items_summary = {}
+    for item in items:
+        result = process_square_item(item, output_format="summary")
+        if result:
+            items_summary.update(result)
+    
+    return {
+        "square_connected": True,
+        "items": items_summary
+    }
 
 def get_auth_url_values():
     """
@@ -133,6 +206,7 @@ def get_auth_url_values():
     }
 
 def exchange_code_for_token(code):
+    """Exchange authorization code for access token"""
     url = f"{settings.SQUARE_BASE_URL}/oauth2/token"
     headers = {
         "Content-Type": "application/json",
@@ -153,38 +227,11 @@ def exchange_code_for_token(code):
     else:
         return {"error": f"Failed to exchange code for token: {response.status_code} - {response.text}"}
 
-def format_square_item(item):
-    """Format a Square catalog item for the API response."""
-    if not item or item.get("type") != "ITEM" or "item_data" not in item:
-        return None
-    
-    item_data = item["item_data"]
-    
-    variations = []
-    for variation in item_data.get("variations", []):
-        if "item_variation_data" in variation:
-            var_data = variation["item_variation_data"]
-            price_money = var_data.get("price_money", {})
-            variations.append({
-                "id": variation["id"],
-                "name": var_data.get("name", ""),
-                "price_money": price_money,
-            })
-
-    categories = [cat.get("id") for cat in item_data.get("categories", []) if "id" in cat]
-    
-    return {
-        "id": item["id"],
-        "name": item_data.get("name", ""),
-        "description": item_data.get("description", ""),
-        "variations": variations,
-        "categories": categories
-    }
-
 def fetch_and_save_square_sales_data(business):
+
     """
     Fetch sales data from Square API and save it to the database.
-    """    
+    """
     # Calculate the date range
     end_date = datetime.now(timezone('UTC')).isoformat()
     

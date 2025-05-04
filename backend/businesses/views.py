@@ -7,7 +7,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from sales.models import SalesDataPoint
 from config import settings
-from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, format_square_item
+from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
@@ -137,7 +137,16 @@ class BusinessDetailView(APIView):
                 business = Business(owner=request.user)
                 business.logo = logo_file
                 business.save()
-                return Response({"message": "Business created with logo"}, status=status.HTTP_201_CREATED)
+                response = Response(business, status=status.HTTP_201_CREATED)
+                response.set_cookie(
+                    key="business_id",
+                    value=str(business.id),
+                    path="/",
+                    httponly=True,
+                    secure=True,
+                    samesite="None",
+                )
+                return response
             else:
                 business.logo = logo_file
                 business.save(update_fields=['logo'])
@@ -155,8 +164,17 @@ class BusinessDetailView(APIView):
         if not business:
             serializer = BusinessSerializer(data=request.data, context={'request': request})
             if serializer.is_valid():
-                serializer.save(owner=request.user)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                business = serializer.save(owner=request.user)            
+                response = Response(serializer.data, status=status.HTTP_201_CREATED)
+                response.set_cookie(
+                    key="business_id",
+                    value=str(business.id),
+                    path="/",
+                    httponly=True,
+                    secure=True,
+                    samesite="None",
+                )
+                return response
         else:
             serializer = BusinessSerializer(business, data=request.data, partial=partial, context={'request': request})
             if serializer.is_valid():
@@ -317,7 +335,7 @@ class SquareViewSet(viewsets.ViewSet):
             items = []
             if items_response.is_success():
                 for obj in items_response.body.get("objects", []):
-                    item = format_square_item(obj)
+                    item = process_square_item(obj, output_format="detail")
                     if item:
                         items.append(item)
             
