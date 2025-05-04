@@ -26,6 +26,7 @@ class Post(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the post was created
     posted_at = models.DateTimeField(blank=True, null=True) # Timestamp when post is published
     scheduled_at = models.DateTimeField(blank=True, null=True) # Timestamp for when the post is scheduled to be published
+    scheduled_id = models.TextField(blank=True, null=True) #Celery id for post schedule
     status = models.CharField(
         max_length=20,
         choices=POST_STATUS_OPTIONS,

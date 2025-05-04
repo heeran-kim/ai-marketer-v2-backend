@@ -111,7 +111,7 @@ def publishToMeta(platform, caption, image_url, token_decoded):
     response = requests.post(url, data=data)
     if response.status_code != 200:
         # Handle error response
-        return {"error": f"Unable to create Media Obj.", "status": False}
+        return {"error": f"Unable to create Media Obj. {response.text}", "status": False}
     media_data = response.json()
     if not media_data.get("id"):
         return {"error": "Unable to retrieve media ID", "status": False}
@@ -143,5 +143,7 @@ def publishToMeta(platform, caption, image_url, token_decoded):
 @shared_task
 def publish_to_meta_task(platform,caption,image,token):
     logger.error("Scheduled task recieved!")
-    publishToMeta(platform,caption,image,token)
+    error=publishToMeta(platform,caption,image,token)
+    if(error.get('error')):
+        logger.error(error.get('error'))
     logger.error(f"Scheduled task ran at: {datetime.now()}")

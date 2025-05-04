@@ -19,15 +19,14 @@ import os
 from PIL import Image
 import io
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from datetime import datetime, timedelta
 from config.celeryTasks import publish_to_meta_task,publishToMeta
+from celery.result import AsyncResult
 
 from django.core.files import File
 
 from cryptography.fernet import Fernet #cryptography package
-from django.db.models import Q,Count
 
 TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
@@ -122,27 +121,19 @@ class PostListCreateView(ListCreateAPIView):
         ).exclude(
             link__in=links
         )
-
-        for post in posts_not_in_links:
-            if(post.status!="Scheduled"):
-                post.delete()
-
-        #Collect Duplicates and delete scheduled post in replacement of published one
-        duplicates = (
-            Post.objects
-            .values('caption', 'scheduled_at')
-            .annotate(dupe_count=Count('id'))
-            .filter(dupe_count__gt=1)
+        #Fetch posted posts
+        posts_in_links = Post.objects.filter(
+            business=business,
+            platform=platform_obj,
+            link__in=links
         )
-        q_filter = Q()
-        for entry in duplicates:
-            q_filter |= Q(caption=entry['caption'], scheduled_at=entry['scheduled_at'])
 
-        posts_with_same_caption_and_time = Post.objects.filter(q_filter)
-
-        for post in posts_with_same_caption_and_time:
-            if(post.status=="Scheduled"):
-                post.delete()
+        for post in posts_not_in_links:     #Loop through scheduled
+            for post2 in posts_in_links:    #Loop through actual
+                if(post.caption==post2.caption):
+                    if abs((post.scheduled_at - post2.posted_at).total_seconds()) <= 60:  #If distance from scheduled time is less than a minute
+                        logger.error("Same post found!")
+                        post.delete()   #Delete scheduled post
         
     def meta_get_function(self, business, platform):
         #Save posts to the database
@@ -155,8 +146,6 @@ class PostListCreateView(ListCreateAPIView):
         #Check if it was a reset by the user - Not used
         # param = self.request.GET.get('status', None)
         # logger.error(f"Param {param}")
-
-        self.remove_deleted_posts(platform,posts_data,business)
 
         for post_data in posts_data:
             # Check if the post already exists in the database and update reactions
@@ -193,6 +182,8 @@ class PostListCreateView(ListCreateAPIView):
                 )
                 # Save the post to the database
                 post.save()
+
+        self.remove_deleted_posts(platform,posts_data,business)
 
 
     def get_queryset(self):
@@ -274,6 +265,24 @@ class PostListCreateView(ListCreateAPIView):
             return None #return error if no instagram account found
         return insta_account_data.get("id") #return the instagram account id
     
+    def get_user_access_token(self, user):
+        f = Fernet(TWOFA_ENCRYPTION_KEY) 
+        token=user.access_token[1:]  #do 1: to not include byte identifier
+        token_decrypted=f.decrypt(token)
+        token_decoded=token_decrypted.decode()
+        return token_decoded
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        # TODO
+        business = Business.objects.filter(owner=self.request.user).first()
+        serializer.save(business=business)
+
     def crop_center_resize(self, image, target_width=1080, target_height=1350):
         aspect_target = target_width / target_height
         width, height = image.size
@@ -296,24 +305,7 @@ class PostListCreateView(ListCreateAPIView):
         cropped = image.crop((left, top, right, bottom))
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
         return resized
-    
-    def get_user_access_token(self, user):
-        f = Fernet(TWOFA_ENCRYPTION_KEY) 
-        token=user.access_token[1:]  #do 1: to not include byte identifier
-        token_decrypted=f.decrypt(token)
-        token_decoded=token_decrypted.decode()
-        return token_decoded
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_create(self, serializer):
-        # TODO
-        business = Business.objects.filter(owner=self.request.user).first()
-        serializer.save(business=business)
 
     def upload_image_file(self,image_file,aspectRatio):
         #Get Image setup
@@ -431,13 +423,15 @@ class PostListCreateView(ListCreateAPIView):
 
         image_url=self.upload_image_file(request.FILES.get('image'),data.get("aspect_ratio","4/5"))
         access_token=self.get_user_access_token(request.user)
+        scheduled_id=None
 
         match data["platform"]:
             case 'facebook':
                 #Schedule post
                 if scheduled_at:
                     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-                    publish_to_meta_task.apply_async(args=["facebook", data.get("caption", ""),image_url,access_token],eta=dt)
+                    #result = publish_to_meta_task.apply_async(args=["facebook", data.get("caption", ""),image_url,access_token],eta=dt)
+                    #scheduled_id=result.id
                     link="Not published yet!"
                 #Else post straight away
                 else:
@@ -449,7 +443,8 @@ class PostListCreateView(ListCreateAPIView):
                 #Schedule post
                 if scheduled_at:
                     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-                    publish_to_meta_task.apply_async(args=["instagram", data.get("caption", ""),image_url,access_token],eta=dt)
+                    #result = publish_to_meta_task.apply_async(args=["instagram", data.get("caption", ""),image_url,access_token],eta=dt)
+                    #scheduled_id=result.id
                     link="Not published yet!"
                 #Else post straight away
                 else:
@@ -462,7 +457,7 @@ class PostListCreateView(ListCreateAPIView):
             case _:
                 return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
         
-
+        logger.error(scheduled_id)
         #Now create post object on backend here if successfully published/scheduled
         post = Post.objects.create(
             business=business,
@@ -473,7 +468,8 @@ class PostListCreateView(ListCreateAPIView):
             posted_at=posted_at,
             scheduled_at=scheduled_at,
             status=post_status,
-            promotion=promotion
+            promotion=promotion,
+            scheduled_id='123'
         )
                 
         categories_data = json.loads(data.get("categories", "[]"))
@@ -557,12 +553,65 @@ class PostDetailView(APIView):
 
         serializer = PostSerializer(post)
         return Response(serializer.data)
+    
+    def upload_image_file(self,image_file,aspectRatio):
+        #Get Image setup
+        headers = {
+            'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
+        }
+
+        #image_file.file.seek(0)
+        img = Image.open(image_file)
+        if(aspectRatio == "1/1"):
+            img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
+        else:
+            img = self.crop_center_resize(img) # 4:5 portrait
+        # Save to in-memory buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG')
+        buffer.seek(0)
+        files = {'image': ('image.jpg', buffer, 'image/jpeg')}
+        response = requests.post(
+            'https://api.imgur.com/3/image',
+            headers=headers,
+            files=files
+        )
+        if response.status_code != 200:
+            return {"error": f"Unable to upload to Imgur | text:{response.text}", "status": False}
+        image_url = response.json()['data']['link']
+        return image_url
+
+    def crop_center_resize(self, image, target_width=1080, target_height=1350):
+            aspect_target = target_width / target_height
+            width, height = image.size
+            aspect_original = width / height
+
+            #Crop to match aspect ratio
+            if aspect_original > aspect_target:
+                #If too wide — crop sides
+                new_width = int(height * aspect_target)
+                left = (width - new_width) // 2
+                right = left + new_width
+                top, bottom = 0, height
+            else:
+                #If too tall — crop top/bottom
+                new_height = int(width / aspect_target)
+                top = (height - new_height) // 2
+                bottom = top + new_height
+                left, right = 0, width
+
+            cropped = image.crop((left, top, right, bottom))
+            resized = cropped.resize((target_width, target_height), Image.LANCZOS)
+            return resized
 
     def patch(self, request, pk):
         """Update a post partially"""
         post, error_response = self.get_post(pk, request.user)
         if error_response:
             return error_response
+        
+        if post.scheduled_id:
+            AsyncResult(post.scheduled_id).revoke(terminate=True)
 
         # Handle caption updates
         if 'caption' in request.data:
@@ -582,8 +631,12 @@ class PostDetailView(APIView):
                 post.categories.add(category)
 
         # Handle image updates if provided
+        image_url=None
         if 'image' in request.FILES:
             post.image = request.FILES['image']
+        image_url=self.upload_image_file(post.image,request.data.get("aspect_ratio","4/5"))
+        
+        access_token=self.get_user_access_token(request.user)
 
         # Handle scheduled_at updates
         if 'scheduled_at' in request.data:
@@ -592,12 +645,37 @@ class PostDetailView(APIView):
             if scheduled_at:
                 post.scheduled_at = scheduled_at
                 post.status = 'Scheduled'
+                
+                #Send new task to celery for publishing
+                dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+                match post.platform.platform:
+                    case 'facebook':
+                        result = publish_to_meta_task.apply_async(args=["facebook", request.data.get("caption", ""),image_url,access_token],eta=dt)                     
+                    case 'instagram':    
+                        result = publish_to_meta_task.apply_async(args=["instagram", request.data.get("caption", ""),image_url,access_token],eta=dt)
+                    case _:
+                        return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
+                scheduled_id=result.id
+                post.scheduled_id=scheduled_id
             else:
                 post.scheduled_at = None
                 try:
-                    # TODO success = publish_to_social_media(post)
+                    match post.platform.platform:
+                        case 'facebook':
+                            response = publishToMeta("facebook", request.data.get("caption", ""),image_url,access_token)
+                            if (response.get("status") == False):
+                                return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                            link=response.get("message")
+                        case 'instagram':
+                            response = publishToMeta("instagram", request.data.get("caption", ""),image_url,access_token)
+                            if (response.get("status") == False):
+                                return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                            link=response.get("message")
+                        case _:
+                            return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
                     success = True
-                    post.link = "https://test.com/p/test"
+                    post.link = link
+                    post.scheduled_id=None
 
                     if success:
                         post.status = 'Published'
@@ -647,8 +725,15 @@ class PostDetailView(APIView):
         """Delete a post"""
         post, error_response = self.get_post(pk, request.user)
 
+        if post.posted_at and post.scheduled_id:
+            AsyncResult(post.scheduled_id).revoke(terminate=True)
+
         if error_response:
             return error_response
+
+        if(post.status!="Published"):
+            post.delete()
+            return Response({"message": "Post deleted successfully"}, status=status.HTTP_200_OK)
 
         if post.platform.platform=='instagram':
             return Response({"message": "Instagram deletion not implemented yet"}, status=status.HTTP_400_BAD_REQUEST)
