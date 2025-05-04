@@ -23,6 +23,7 @@ from datetime import datetime
 from datetime import datetime, timedelta
 from config.celeryTasks import publish_to_meta_task,publishToMeta
 from celery.result import AsyncResult
+from django.utils import timezone
 
 from django.core.files import File
 
@@ -114,7 +115,7 @@ class PostListCreateView(ListCreateAPIView):
             for post_data in posts_data
         ]
 
-        # Fetch posts for the business and platform where link is NOT in the list
+        # Fetch posts for the business and platform where link is NOT in the list -- Fetch Posts that dont exist in the api
         posts_not_in_links = Post.objects.filter(
             business=business,
             platform=platform_obj
@@ -128,7 +129,15 @@ class PostListCreateView(ListCreateAPIView):
             link__in=links
         )
 
+        for post in posts_not_in_links:     #delete posts that aren't in api but in db
+            if (post.status=='Published'):
+                post.delete()
+
         for post in posts_not_in_links:     #Loop through scheduled
+            if(post.scheduled_at):
+                if(post.scheduled_at < timezone.now()):
+                    post.status='Failed'
+                    post.save()
             for post2 in posts_in_links:    #Loop through actual
                 if(post.caption==post2.caption):
                     if abs((post.scheduled_at - post2.posted_at).total_seconds()) <= 60:  #If distance from scheduled time is less than a minute
@@ -163,13 +172,13 @@ class PostListCreateView(ListCreateAPIView):
             file_path= self.save_meta_image(post_data,f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg",platform)
             comments= post_data.get("comments", 0)
             comment_count=len(post_data.get("comments").get("data")) if comments else 0
-
+            caption=post_data.get("caption") if platform=='instagram' else post_data.get("message")
             with open(file_path, 'rb') as f:
                 django_file = File(f)
                 post = Post(
                     business=business,
                     platform=SocialMedia.objects.get(platform=platform),
-                    caption=post_data.get("caption") if platform=='instagram' else post_data.get("message"),
+                    caption=caption if caption else "",
                     link=link,
                     post_id=post_data.get("id"),
                     posted_at=post_data.get("timestamp") if platform=='instagram' else post_data.get("created_time"),
@@ -430,8 +439,8 @@ class PostListCreateView(ListCreateAPIView):
                 #Schedule post
                 if scheduled_at:
                     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-                    #result = publish_to_meta_task.apply_async(args=["facebook", data.get("caption", ""),image_url,access_token],eta=dt)
-                    #scheduled_id=result.id
+                    result = publish_to_meta_task.apply_async(args=["facebook", data.get("caption", ""),image_url,access_token],eta=dt)
+                    scheduled_id=result.id
                     link="Not published yet!"
                 #Else post straight away
                 else:
@@ -443,8 +452,8 @@ class PostListCreateView(ListCreateAPIView):
                 #Schedule post
                 if scheduled_at:
                     dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-                    #result = publish_to_meta_task.apply_async(args=["instagram", data.get("caption", ""),image_url,access_token],eta=dt)
-                    #scheduled_id=result.id
+                    result = publish_to_meta_task.apply_async(args=["instagram", data.get("caption", ""),image_url,access_token],eta=dt)
+                    scheduled_id=result.id
                     link="Not published yet!"
                 #Else post straight away
                 else:
@@ -469,7 +478,7 @@ class PostListCreateView(ListCreateAPIView):
             scheduled_at=scheduled_at,
             status=post_status,
             promotion=promotion,
-            scheduled_id='123'
+            scheduled_id=scheduled_id
         )
                 
         categories_data = json.loads(data.get("categories", "[]"))
@@ -637,6 +646,29 @@ class PostDetailView(APIView):
         image_url=self.upload_image_file(post.image,request.data.get("aspect_ratio","4/5"))
         
         access_token=self.get_user_access_token(request.user)
+
+        #Check if its a retry initiated by user
+        if request.data.get('retry'):
+            logger.error("Retry detected")
+            match post.platform.platform:
+                case 'facebook':
+                    response = publishToMeta("facebook", request.data.get("caption", ""),image_url,access_token)
+                    if (response.get("status") == False):
+                        return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                    link=response.get("message")
+                case 'instagram':
+                    response = publishToMeta("instagram", request.data.get("caption", ""),image_url,access_token)
+                    if (response.get("status") == False):
+                        return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
+                    link=response.get("message")
+                case _:
+                    return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
+            post.link = link
+            post.scheduled_id=None
+            post.status = 'Published'
+            post.posted_at = timezone.now()
+            post.save()
+            return Response({"message": "Retry successful"}, status=status.HTTP_200_OK)
 
         # Handle scheduled_at updates
         if 'scheduled_at' in request.data:
