@@ -506,7 +506,7 @@ class PostDetailView(APIView):
         except Post.DoesNotExist:
             return None, Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
         
-    def get_meta_comments(self,user,platform):
+    def get_meta_comments(self,user,platform,post_id):
         #Get Access Token
         token_decoded = self.get_user_access_token(user)
         #Get Facebook page id
@@ -527,7 +527,7 @@ class PostDetailView(APIView):
                 return {"error": "Unable to retrieve page access token 2", "status": False}
             #Get the page access token
             page_access_token = metasData.get("data")[0]["access_token"]
-            url = f'https://graph.facebook.com/v22.0/{facebookPageID}/posts?fields=id,comments.summary(true)&access_token={page_access_token}'
+            url = f'https://graph.facebook.com/v22.0/{post_id}/comments?access_token={page_access_token}'
             response = requests.get(url)
             if response.status_code != 200:
                 # Handle error response
@@ -536,7 +536,27 @@ class PostDetailView(APIView):
             if not media_data.get("data"):
                 return {"error": f"Unable to retrieve posts {response.text}", "status": False}
             posts_data = media_data.get("data")
+            logger.error(posts_data)
             return {"message": posts_data, "status": True}
+        #For Facebook
+        elif platform == 'instagram':
+            url = f'https://graph.facebook.com/v22.0/{post_id}/comments?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to fetch posts. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("data"):
+                return {"error": f"Unable to retrieve posts {response.text}", "status": False}
+            posts_data = media_data.get("data")
+
+            #Format into proper array
+            arr=[]
+            for comment in posts_data:
+                if comment.get('text'):
+                    arr.append({'createdTime':comment['timestamp'],'from':{'name':'User'},'message':comment['text']})
+            logger.error(arr)
+            return {"message": arr, "status": True}
         
     def get_facebook_page_id(self,access_token):
         #Retrieve facebook page id data from Meta's API
@@ -556,7 +576,7 @@ class PostDetailView(APIView):
         """Retrieve a specific post"""
         post, error_response = self.get_post(pk, request.user)
         if 'comments' in request.path:
-            return Response({"message": self.get_meta_comments(request.user,post.platform.platform)}, status=200)
+            return Response({"message": self.get_meta_comments(request.user,post.platform.platform,post.post_id)}, status=200)
         if error_response:
             return error_response
 
