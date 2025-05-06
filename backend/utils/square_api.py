@@ -1,5 +1,4 @@
 # backend/utils/square_api.py
-from .promotions import update_promotion_sold_counts
 from sales.models import SalesDataPoint
 from config import settings
 from businesses.serializers import SquareItemSerializer
@@ -356,13 +355,6 @@ def fetch_and_save_square_sales_data(business):
                     SalesDataPoint.objects.bulk_create(
                         [point for point in sales_points if point.pk is None]
                     )
-
-                product_names = list({point.product_name for point in sales_points})
-                date_range = (
-                    isoparse(start_date).astimezone(timezone('Australia/Brisbane')).date(),
-                    isoparse(end_date).astimezone(timezone('Australia/Brisbane')).date()
-                )
-                update_promotion_sold_counts(business, product_names, date_range)
 
                 business.last_square_sync_at = datetime.now(timezone('UTC'))
                 business.save()

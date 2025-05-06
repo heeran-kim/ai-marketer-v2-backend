@@ -8,7 +8,6 @@ from rest_framework import status
 from django.db.models import Sum, Avg
 
 from utils.square_api import fetch_and_save_square_sales_data
-from utils.promotions import update_promotion_sold_counts
 from businesses.models import Business
 from .models import SalesData, SalesDataPoint
 from django.db import transaction 
@@ -346,8 +345,6 @@ class SalesDataView(APIView):
                 
                 if records_to_create:
                     SalesDataPoint.objects.bulk_create(records_to_create)
-
-            update_promotion_sold_counts(business, product_names, [min(dates), max(dates)])
             
             return Response({
                 "success": True,

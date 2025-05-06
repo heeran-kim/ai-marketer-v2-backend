@@ -21,10 +21,11 @@ class PromotionSerializer(serializers.ModelSerializer):
         write_only=True,
         source="categories"
     )
-    categories = serializers.SerializerMethodField(read_only=True)
+    categories = serializers.SerializerMethodField()
     end_date = serializers.DateField(required=False, allow_null=True)
     product_names = serializers.JSONField(required=False, allow_null=True)
-    products = serializers.SerializerMethodField(read_only=True)
+    products = serializers.SerializerMethodField()
+    sold_count = serializers.SerializerMethodField()
     sales_change = serializers.SerializerMethodField()
 
     class Meta:
@@ -84,6 +85,37 @@ class PromotionSerializer(serializers.ModelSerializer):
         
         return "unknown"
     
+    def get_sold_count(self, obj): 
+        if self.get_status(obj) == "upcoming":
+            return 0
+        
+        today = timezone.now().date()
+        start_date = obj.start_date
+
+        if obj.end_date and obj.end_date < today:
+            end_date = obj.end_date
+        else:
+            end_date = today
+        
+        promotion_days = (end_date - start_date).days + 1
+
+        if promotion_days < 1:
+            return 0
+        
+        products = self.get_products(obj)
+        if not products:
+            return None
+        product_names = [product['name'] for product in products]
+
+        promotion_sales = SalesDataPoint.objects.filter(
+            business=obj.business,
+            product_name__in=product_names,
+            date__gte=start_date,
+            date__lte=end_date
+        ).aggregate(total=Sum('units_sold'))['total'] or 0
+
+        return promotion_sales
+
     def get_sales_change(self, obj):
         if self.get_status(obj) == "upcoming":
             return None
@@ -106,12 +138,7 @@ class PromotionSerializer(serializers.ModelSerializer):
             return None
         product_names = [product['name'] for product in products]
 
-        promotion_sales = SalesDataPoint.objects.filter(
-            business=obj.business,
-            product_name__in=product_names,
-            date__gte=start_date,
-            date__lte=end_date
-        ).aggregate(total=Sum('units_sold'))['total'] or 0
+        promotion_sales = self.get_sold_count(obj)
 
         days_to_look_back = 30
         before_start_date = start_date - timedelta(days=days_to_look_back)
