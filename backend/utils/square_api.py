@@ -1,10 +1,12 @@
 # backend/utils/square_api.py
+from .promotions import update_promotion_sold_counts
 from sales.models import SalesDataPoint
 from config import settings
 from businesses.serializers import SquareItemSerializer
 from square.client import Client
 from datetime import datetime, timedelta
 from pytz import timezone
+from dateutil.parser import isoparse
 from django.db import transaction 
 from decimal import Decimal
 import base64
@@ -344,16 +346,29 @@ def fetch_and_save_square_sales_data(business):
 
         # Save the sales data to the database within a transaction
         if sales_points:
-            with transaction.atomic():
-                # Bulk create or update
-                SalesDataPoint.objects.bulk_update(
-                    [point for point in sales_points if point.pk is not None], 
-                    ['units_sold', 'revenue', 'product_name']
+            try:
+                with transaction.atomic():
+                    # Bulk update & create
+                    SalesDataPoint.objects.bulk_update(
+                        [point for point in sales_points if point.pk is not None], 
+                        ['units_sold', 'revenue', 'product_name']
+                    )
+                    SalesDataPoint.objects.bulk_create(
+                        [point for point in sales_points if point.pk is None]
+                    )
+
+                product_names = list({point.product_name for point in sales_points})
+                date_range = (
+                    isoparse(start_date).astimezone(timezone('Australia/Brisbane')).date(),
+                    isoparse(end_date).astimezone(timezone('Australia/Brisbane')).date()
                 )
-                SalesDataPoint.objects.bulk_create(
-                    [point for point in sales_points if point.pk is None]
-                )
-    
-    business.last_square_sync_at = datetime.now(timezone('UTC'))
-    business.save()
+                update_promotion_sold_counts(business, product_names, date_range)
+
+                business.last_square_sync_at = datetime.now(timezone('UTC'))
+                business.save()
+
+            except Exception as e:
+                logger.error(f"Error during saving sales data or updating promotions: {e}")
+                raise
+
     
