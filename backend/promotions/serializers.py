@@ -112,7 +112,6 @@ class PromotionSerializer(serializers.ModelSerializer):
             date__gte=start_date,
             date__lte=end_date
         ).aggregate(total=Sum('units_sold'))['total'] or 0
-        logger.info(promotion_sales)
 
         days_to_look_back = 30
         before_start_date = start_date - timedelta(days=days_to_look_back)
@@ -144,11 +143,11 @@ class PromotionSerializer(serializers.ModelSerializer):
             return 0
             
         avg_period_sales = sum(period_sales_list) / len(period_sales_list)
-        
+
         if avg_period_sales == 0:
             return promotion_sales
         
-        return round(promotion_sales - avg_period_sales)
+        return round(promotion_sales - avg_period_sales, 1)
     
 class SuggestionSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
