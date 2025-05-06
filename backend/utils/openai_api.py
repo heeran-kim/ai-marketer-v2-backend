@@ -92,6 +92,7 @@ def generate_promotions(payload):
             try:
                 promotion_list = json.loads(result)
                 promotions.extend(promotion_list)
+                logger.info(promotion_list)
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding response: {e}")
                 raise Exception(f"Error parsing promotion response: {e}")

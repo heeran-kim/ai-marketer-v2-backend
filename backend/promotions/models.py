@@ -19,7 +19,7 @@ class Promotion(models.Model):
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     sold_count = models.PositiveIntegerField(default=0, blank=True, null=True)
-    product_names = models.JSONField(default=list, blank=True, null=True) # tore target product names
+    product_names = models.JSONField(default=list, blank=True, null=True) # Store target product names
     product_data = models.JSONField(default=list, blank=True, null=True) # Store product names with category info
     created_at = models.DateTimeField(auto_now_add=True)
 
