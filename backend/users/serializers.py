@@ -6,21 +6,16 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.core.mail import send_mail
-from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from config import settings
 
 import pyotp
 import qrcode
 import os
-
-# Setup logger for debugging and tracking requests
-import logging
-logger = logging.getLogger(__name__)
-
 
 from cryptography.fernet import Fernet #cryptography package
 
@@ -193,7 +188,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
         token = default_token_generator.make_token(user)
         
         # Create reset link for frontend
-        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://localhost:3000')
+        frontend_url = settings.FRONTEND_BASE_URL
         reset_link = f"{frontend_url}/reset-password?uid={uid}&token={token}"
         
         # Compose email content
@@ -242,7 +237,6 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Validates the reset token and checks password strength."""
-        logger.info(data)
         try:
             # Decode the UID
             uid = force_str(urlsafe_base64_decode(data['uid']))
