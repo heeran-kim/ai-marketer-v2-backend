@@ -275,6 +275,18 @@ AUTH_USER_MODEL = 'users.User'
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+# Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = 'akastudioaimarketer@gmail.com'
+EMAIL_HOST_PASSWORD = 'sibo nkqr khpp yxwr'
+DEFAULT_FROM_EMAIL = 'AI Marketer <akastudioaimarketer@gmail.com>'
+
+# Logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
