@@ -9,7 +9,6 @@ from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
-import logging
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
 
@@ -32,6 +31,7 @@ User = get_user_model()
 TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 
 # Setup logger for debugging and tracking requests
+import logging
 logger = logging.getLogger(__name__)
 
 

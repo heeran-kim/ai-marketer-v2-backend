@@ -2,9 +2,25 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
 
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.conf import settings
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 import pyotp
 import qrcode
 import os
+
+# Setup logger for debugging and tracking requests
+import logging
+logger = logging.getLogger(__name__)
+
 
 from cryptography.fernet import Fernet #cryptography package
 
@@ -158,14 +174,58 @@ class ForgotPasswordSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Checks if the provided email exists in the database."""
-        # TODO: Check if the email is registered
-        pass
+        email = data.get('email')
+        try:
+            # Get the user with this email
+            user = User.objects.get(email=email)
+            # Store user in the validated data for later use
+            data['user'] = user
+            return data
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No user is registered with this email address.")
 
     def save(self, **kwargs):
         """Generates a password reset token and sends an email."""
-        # TODO: Generate password reset token
-        # TODO: Send email with reset link
-        pass
+        user = self.validated_data['user']
+        
+        # Generate token
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        
+        # Create reset link for frontend
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://localhost:3000')
+        reset_link = f"{frontend_url}/reset-password?uid={uid}&token={token}"
+        
+        # Compose email content
+        subject = "Reset your AI Marketer password"
+        
+        # Plain text email content
+        message = f"""
+Hello {user.name if hasattr(user, 'name') else ''},
+
+You're receiving this email because you requested a password reset for your AI Marketer account.
+
+Please click the link below to set a new password:
+{reset_link}
+
+This link will expire in 24 hours for security reasons.
+
+If you didn't request this password reset, please ignore this email.
+
+Thanks,
+The AI Marketer Team
+        """
+        
+        # Send email (plain text only)
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False
+        )
+        
+        return user
 
 class ResetPasswordSerializer(serializers.Serializer):
     """
@@ -176,16 +236,41 @@ class ResetPasswordSerializer(serializers.Serializer):
     - Updates the user's password if the token is valid.
     - Ensures the new password meets security requirements.
     """
+    uid = serializers.CharField()
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True, min_length=6)
 
     def validate(self, data):
         """Validates the reset token and checks password strength."""
-        # TODO: Validate token (check if it exists and is not expired)
-        # TODO: Ensure new password meets security policies
-        pass
+        logger.info(data)
+        try:
+            # Decode the UID
+            uid = force_str(urlsafe_base64_decode(data['uid']))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError("Invalid user identifier")
+        
+        # Validate token
+        if not default_token_generator.check_token(user, data['token']):
+            raise serializers.ValidationError("Invalid or expired token")
+        
+        # Validate password strength
+        try:
+            validate_password(data['new_password'], user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({'new_password': list(e.messages)})
+        
+        # Store user for save method
+        data['user'] = user
+        return data
 
     def save(self, **kwargs):
         """Updates the user's password."""
-        # TODO: Reset user password
-        pass
+        user = self.validated_data['user']
+        new_password = self.validated_data['new_password']
+        
+        # Set new password
+        user.set_password(new_password)
+        user.save()
+        
+        return user
