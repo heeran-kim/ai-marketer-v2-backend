@@ -536,9 +536,17 @@ class PostDetailView(APIView):
             if not media_data.get("data"):
                 return {"error": f"Unable to retrieve posts {response.text}", "status": False}
             posts_data = media_data.get("data")
-            logger.error(posts_data)
-            return {"message": posts_data, "status": True}
-        #For Facebook
+
+            #Format into proper array
+            arr=[]
+            for comment in posts_data:
+                if comment.get('message'):
+                    replies = self.get_comment_replies(user,platform,comment['id'],page_access_token)
+                    arr.append({'id':comment['id'],'createdTime':comment['created_time'],'from':{'name':comment['from']['name']},'message':comment['message'],'replies':replies})
+            logger.error(arr)
+            return {"message": arr, "status": True}
+        
+        #For Insta
         elif platform == 'instagram':
             url = f'https://graph.facebook.com/v22.0/{post_id}/comments?access_token={token_decoded}'
             response = requests.get(url)
@@ -554,9 +562,68 @@ class PostDetailView(APIView):
             arr=[]
             for comment in posts_data:
                 if comment.get('text'):
-                    arr.append({'createdTime':comment['timestamp'],'from':{'name':'User'},'message':comment['text']})
+                    replies = self.get_comment_replies(user,platform,comment['id'],token_decoded)
+                    arr.append({'id':comment['id'],'createdTime':comment['timestamp'],'from':{'name':'User'},'message':comment['text'],'replies':replies})
             logger.error(arr)
             return {"message": arr, "status": True}
+        
+    def get_comment_replies(self,user,platform,comment_id,token_decoded):
+        #Get account username
+        business = Business.objects.filter(owner=user).first()
+        linked_platform = SocialMedia.objects.filter(business=business, platform=platform)
+        if(not linked_platform.exists()):
+            return []
+        
+        if(platform=='facebook'):
+            #Get replies
+            url = f'https://graph.facebook.com/v22.0/{comment_id}/comments?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                logger.error(f"Error fetching comments {response.text}")
+                return []
+                #return {"error": f"Error fetching comments. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("data"):
+                logger.error(f"Error retrieving comments {response.text}")
+                return []
+                #return {"error": f"Error retrieving comments {response.text}", "status": False}
+            posts_data = media_data.get("data")
+
+            replies=[]
+            for comment in posts_data:
+                if comment.get('message'):
+                    #logger.error(linked_platform.first().username)
+                    #Get only replies from yourself
+                    if (comment['from']['name']==linked_platform.first().username):
+                        replies.append(comment.get('message'))
+
+            return replies
+        elif platform=='instagram':
+            #Get replies
+            url = f'https://graph.facebook.com/v22.0/{comment_id}/replies?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                logger.error(f"Error fetching comments {response.text}")
+                return []
+                #return {"error": f"Error fetching comments. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("data"):
+                logger.error(f"Error retrieving comments {response.text}")
+                return []
+                #return {"error": f"Error retrieving comments {response.text}", "status": False}
+            posts_data = media_data.get("data")
+
+            replies=[]
+            for comment in posts_data:
+                if comment.get('text'):
+                    replies.append(comment.get('text'))
+
+            return replies
+        return []
+
+
         
     def get_facebook_page_id(self,access_token):
         #Retrieve facebook page id data from Meta's API
