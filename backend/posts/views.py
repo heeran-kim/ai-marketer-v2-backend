@@ -542,7 +542,8 @@ class PostDetailView(APIView):
             for comment in posts_data:
                 if comment.get('message'):
                     replies = self.get_comment_replies(user,platform,comment['id'],page_access_token)
-                    arr.append({'id':comment['id'],'createdTime':comment['created_time'],'from':{'name':comment['from']['name']},'message':comment['message'],'replies':replies})
+                    comment_data= self.get_comment_likes(platform,comment['id'],page_access_token)
+                    arr.append({'id':comment['id'],'createdTime':comment['created_time'],'from':{'name':comment['from']['name']},'message':comment['message'],'replies':replies,'likeCount':comment_data['count'],'selfLike':comment_data['self_like']})
             logger.error(arr)
             return {"message": arr, "status": True}
         
@@ -563,9 +564,28 @@ class PostDetailView(APIView):
             for comment in posts_data:
                 if comment.get('text'):
                     replies = self.get_comment_replies(user,platform,comment['id'],token_decoded)
-                    arr.append({'id':comment['id'],'createdTime':comment['timestamp'],'from':{'name':'User'},'message':comment['text'],'replies':replies})
+                    arr.append({'id':comment['id'],'createdTime':comment['timestamp'],'from':{'name':'User'},'message':comment['text'],'replies':replies,'like_count':None,'self_like':False})
             logger.error(arr)
             return {"message": arr, "status": True}
+        
+    def get_comment_likes(self,platform,comment_id,token_decoded):
+        if platform=='facebook':
+            #Get replies
+            url = f'https://graph.facebook.com/v22.0/{comment_id}/likes?summary=true&access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                logger.error(f"Error fetching comments likes {response.text}")
+                return {'count':None,'self_like':False}
+                #return {"error": f"Error fetching comments likes. {response.text}", "status": False}
+            media_data = response.json()
+            if not media_data.get("summary"):
+                logger.error(f"Error retrieving comments likes {response.text}")
+                return {'count':0,'self_like':False}
+                #return {"error": f"Error retrieving comments likes {response.text}", "status": False}
+            posts_data = media_data.get("summary")
+            
+            return {'count':posts_data['total_count'],'self_like':posts_data['has_liked']}
         
     def get_comment_replies(self,user,platform,comment_id,token_decoded):
         #Get account username
@@ -638,12 +658,121 @@ class PostDetailView(APIView):
             return None
         #else return the page id
         return metasData.get("data")[0]["id"]
+    
+    def post_comment_likes(self,platform,comment_id,user):
+        #Get Access Token
+        token_decoded = self.get_user_access_token(user)
+        #Get Facebook page id
+        facebookPageID=self.get_facebook_page_id(token_decoded)
+        if not facebookPageID:
+            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+        
+        if platform=='facebook':
+            #Get page access token
+            url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+            response = requests.get(url)
+            if response.status_code != 200:
+                # Handle error response
+                return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+            metasData = response.json()
+            if not metasData.get("data"):
+                return {"error": "Unable to retrieve page access token 2", "status": False}
+            #Get the page access token
+            page_access_token = metasData.get("data")[0]["access_token"]
 
-    def get(self, request, pk):
+            like_obj=self.get_comment_likes('facebook',comment_id,page_access_token)
+            logger.error(like_obj)
+            if( not like_obj['self_like']):
+                #Then leave a like
+                url = f'https://graph.facebook.com/v22.0/{comment_id}/likes?access_token={page_access_token}'
+                response = requests.post(url)
+                if response.status_code != 200:
+                    # Handle error response
+                    logger.error(f"Error liking comment {response.text}")
+                    return False
+                    #return {"error": f"Error liking comment. {response.text}", "status": False}
+                media_data = response.json()
+                # if not media_data.get("data"):
+                #     logger.error(f"Error retrieving liked comment {response.text}")
+                #     return False
+                #     #return {"error": f"Error retrieving liked comments likes {response.text}", "status": False}
+                # posts_data = media_data.get("data")
+                logger.error(media_data)
+            else:
+                #Then delete
+                url = f'https://graph.facebook.com/v22.0/{comment_id}/likes?access_token={page_access_token}'
+                response = requests.delete(url)
+                if response.status_code != 200:
+                    # Handle error response
+                    logger.error(f"Error liking comment {response.text}")
+                    return False
+                    #return {"error": f"Error liking comment. {response.text}", "status": False}
+                media_data = response.json()
+                # if not media_data.get("data"):
+                #     logger.error(f"Error retrieving liked comment {response.text}")
+                #     return False
+                #     #return {"error": f"Error retrieving liked comments likes {response.text}", "status": False}
+                # posts_data = media_data.get("data")
+                logger.error(media_data)
+            return True
+
+    def post_comment_reply(self,platform,comment_id,user,msg):
+        #Get Access Token
+        token_decoded = self.get_user_access_token(user)
+        #Get Facebook page id
+        facebookPageID=self.get_facebook_page_id(token_decoded)
+        if not facebookPageID:
+            return {"error": "Unable to retrieve Facebook Page ID! Maybe reconnect your Facebook or Instagram account in Settings!", "status": False}
+        
+        #Get page access token
+        url = f'https://graph.facebook.com/v22.0/me/accounts?access_token={token_decoded}'
+        response = requests.get(url)
+        if response.status_code != 200:
+            # Handle error response
+            return {"error": f"Unable to retrieve page access token. {response.text}", "status": False}
+        metasData = response.json()
+        if not metasData.get("data"):
+            return {"error": "Unable to retrieve page access token 2", "status": False}
+        #Get the page access token
+        page_access_token = metasData.get("data")[0]["access_token"]
+
+        if platform=='facebook' and msg!="delete000":
+            #Now Reply
+            url = f'https://graph.facebook.com/v22.0/{comment_id}/comments?message={msg}&access_token={page_access_token}'
+            response = requests.post(url)
+            if response.status_code != 200:
+                # Handle error response
+                logger.error(f"Error replying to comment {response.text}")
+                return False
+                #return {"error": f"Error liking comment. {response.text}", "status": False}
+            media_data = response.json()
+            logger.error(media_data)
+            return True
+        elif platform=="facebook":
+            #Now Delete
+            url = f'https://graph.facebook.com/v22.0/{comment_id}?access_token={page_access_token}'
+            response = requests.delete(url)
+            if response.status_code != 200:
+                # Handle error response
+                logger.error(f"Error deleting comment {response.text}")
+                return False
+                #return {"error": f"Error liking comment. {response.text}", "status": False}
+            media_data = response.json()
+            logger.error(media_data)
+            return True
+
+    def get(self, request, pk,msg=""):
+        """Check to see if its a comment operation"""
+        if 'likecomments' in request.path:
+            return Response({"message": self.post_comment_likes('facebook',pk,request.user)}, status=200)
+        if 'replycomments' in request.path:
+            return Response({"message": self.post_comment_reply('facebook',pk,request.user,msg)}, status=200)
+        
         """Retrieve a specific post"""
         post, error_response = self.get_post(pk, request.user)
         if 'comments' in request.path:
             return Response({"message": self.get_meta_comments(request.user,post.platform.platform,post.post_id)}, status=200)
+
         if error_response:
             return error_response
 
