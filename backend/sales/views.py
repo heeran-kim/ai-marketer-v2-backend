@@ -16,6 +16,7 @@ import os
 import pandas as pd
 from pandas.errors import EmptyDataError
 import datetime
+from django.utils import timezone
 from decimal import Decimal
 from collections import defaultdict
 
@@ -247,7 +248,7 @@ class SalesDataView(APIView):
             filename=filename,
             file_type=file_extension,
             processed=True,
-            processed_at=datetime.datetime.now()
+            processed_at=timezone.now()
         )
         
         try:

@@ -5,6 +5,7 @@ from businesses.serializers import SquareItemSerializer
 from square.client import Client
 from datetime import datetime, timedelta
 from pytz import timezone
+from dateutil.parser import isoparse
 from django.db import transaction 
 from decimal import Decimal
 import base64
@@ -344,16 +345,22 @@ def fetch_and_save_square_sales_data(business):
 
         # Save the sales data to the database within a transaction
         if sales_points:
-            with transaction.atomic():
-                # Bulk create or update
-                SalesDataPoint.objects.bulk_update(
-                    [point for point in sales_points if point.pk is not None], 
-                    ['units_sold', 'revenue', 'product_name']
-                )
-                SalesDataPoint.objects.bulk_create(
-                    [point for point in sales_points if point.pk is None]
-                )
-    
-    business.last_square_sync_at = datetime.now(timezone('UTC'))
-    business.save()
+            try:
+                with transaction.atomic():
+                    # Bulk update & create
+                    SalesDataPoint.objects.bulk_update(
+                        [point for point in sales_points if point.pk is not None], 
+                        ['units_sold', 'revenue', 'product_name']
+                    )
+                    SalesDataPoint.objects.bulk_create(
+                        [point for point in sales_points if point.pk is None]
+                    )
+
+                business.last_square_sync_at = datetime.now(timezone('UTC'))
+                business.save()
+
+            except Exception as e:
+                logger.error(f"Error during saving sales data or updating promotions: {e}")
+                raise
+
     
