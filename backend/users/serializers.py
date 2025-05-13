@@ -88,24 +88,6 @@ class SocialLoginSerializer(serializers.Serializer):
         # TODO: Implement provider-specific OAuth validation and user creation logic
         pass
 
-class PasskeyLoginSerializer(serializers.Serializer):
-    """
-    Serializer for passkey authentication (WebAuthn/FIDO2).
-    This allows users to authenticate using biometric or security keys.
-    """
-    passkey_data = serializers.CharField()
-
-    def validate(self, data):
-        """
-        Validate passkey authentication.
-
-        - If the email exists, authenticate user with stored passkey.
-        - If the email does not exist, create a new user and store the passkey.
-        - Return the authenticated user.
-        """
-        # TODO: Implement WebAuthn passkey registration logic
-        pass
-
 class TwoFactorVerificationSerializer(serializers.Serializer):
     """
     Serializer for two-factor authentication (2FA) verification.

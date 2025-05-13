@@ -16,7 +16,6 @@ register_schema = {
     
     Future enhancements:
     - Will be extended to support social registration - Feature 1.c
-    - Will support passkey registration for biometric authentication - Feature 1.d
     """,
     'request': {
         "application/json": inline_serializer(
@@ -72,7 +71,6 @@ login_schema = {
 
     **Future Enhancements**:
     - Support for social login via OAuth2 (Google, Facebook, Apple) – Feature 1.c
-    - Integration of passkey/biometric authentication – Feature 1.d
     - Implementation of two-factor authentication (2FA) – Feature 1.e
     """,
     'responses': {
@@ -117,11 +115,6 @@ login_schema = {
         OpenApiExample(
             "Social Login",
             value={"method": "social", "credentials": {"provider": "google", "access_token": "some_token"}},
-            request_only=True,
-        ),
-        OpenApiExample(
-            "Passkey Login",
-            value={"method": "passkey", "credentials": {"passkey_data": "some_passkey_data"}},
             request_only=True,
         ),
         OpenApiExample(
