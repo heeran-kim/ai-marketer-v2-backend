@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
 
-from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, PasskeyLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
+from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
@@ -67,7 +67,6 @@ class LoginView(APIView):
         strategy_map = {
             "traditional": TraditionalLoginSerializer,
             "social": SocialLoginSerializer,
-            "passkey": PasskeyLoginSerializer,
             "2fa": TwoFactorVerificationSerializer,
         }
         return strategy_map.get(self.request.data.get('method', 'traditional'))
@@ -76,8 +75,6 @@ class LoginView(APIView):
     def post(self, request):
         """Handles user login requests dynamically and generates tokens"""
         serializer_class = self.get_serializer_class()
-        #TODO: Remove bottom line (its for debugging)
-        #logger.info(f"{serializer_class} {request.data.get('method')}")
         if not serializer_class:
             return Response(
                 {"error": f"Unsupported login method: {request.data.method}"},

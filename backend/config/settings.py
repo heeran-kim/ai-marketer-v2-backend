@@ -154,7 +154,7 @@ SPECTACULAR_SETTINGS = {
     'TAGS': [
         {
             'name': 'users',
-            'description': 'User authentication and account management endpoints. Includes traditional register, login, and logout functionality with JWT tokens stored in HTTP-only cookies. Current implementation supports email-based authentication. Planned future enhancements include forgot password, social media logins (Google, Facebook, Apple), passkey support (Face ID/fingerprint), and 2FA.'
+            'description': 'User authentication and account management endpoints. Includes traditional register, login, and logout functionality with JWT tokens stored in HTTP-only cookies. Current implementation supports email-based authentication. Planned future enhancements include forgot password, social media logins (Google, Facebook, Apple), and 2FA.'
         },
         {
             'name': 'businesses',
