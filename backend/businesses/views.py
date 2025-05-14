@@ -137,16 +137,7 @@ class BusinessDetailView(APIView):
                 business = Business(owner=request.user)
                 business.logo = logo_file
                 business.save()
-                response = Response(business, status=status.HTTP_201_CREATED)
-                response.set_cookie(
-                    key="business_id",
-                    value=str(business.id),
-                    path="/",
-                    httponly=True,
-                    secure=True,
-                    samesite="None",
-                )
-                return response
+                return Response(business, status=status.HTTP_201_CREATED)
             else:
                 business.logo = logo_file
                 business.save(update_fields=['logo'])
@@ -165,16 +156,7 @@ class BusinessDetailView(APIView):
             serializer = BusinessSerializer(data=request.data, context={'request': request})
             if serializer.is_valid():
                 business = serializer.save(owner=request.user)            
-                response = Response(serializer.data, status=status.HTTP_201_CREATED)
-                response.set_cookie(
-                    key="business_id",
-                    value=str(business.id),
-                    path="/",
-                    httponly=True,
-                    secure=True,
-                    samesite="None",
-                )
-                return response
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             serializer = BusinessSerializer(business, data=request.data, partial=partial, context={'request': request})
             if serializer.is_valid():

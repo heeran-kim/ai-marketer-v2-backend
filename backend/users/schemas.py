@@ -65,7 +65,7 @@ login_schema = {
     Authenticate a user and receive tokens.
     
     This endpoint allows users to log in using an authentication method that securely verifies credentials.
-    It returns a refresh token in the response body and sets an access token in an HTTP-only secure cookie for enhanced security.
+    It sets an access token in an HTTP-only secure cookie for enhanced security.
     
     **Implementation Status**: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
 
@@ -79,7 +79,6 @@ login_schema = {
                 name="LoginSuccess",
                 fields={
                     "message": serializers.CharField(default="Login successful"),
-                    "refresh": serializers.CharField(),
                 }
             ),
             description="Successful login. Access token is set in HttpOnly Cookie."
@@ -182,8 +181,7 @@ logout_schema = {
     
     This endpoint invalidates the user's authentication by:
     1. Clearing the access token cookie
-    2. Blacklisting the refresh token to prevent reuse
-    3. Ending the current session
+    2. Ending the current session
     
     Implementation status: ✅ Fully implemented (Frontend & Backend) – Feature 1.a
     """,

@@ -7,7 +7,7 @@ from rest_framework.generics import GenericAPIView
 from django.contrib.auth import get_user_model
 
 from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import AccessToken
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
@@ -56,7 +56,6 @@ class RegisterView(generics.CreateAPIView):
 class LoginView(APIView):
     """
     API for user authentication.
-    - Returns access & refresh tokens if authentication is successful
     - Stores the access token in HttpOnly Secure Cookie
     """
     permission_classes = [AllowAny]
@@ -83,40 +82,24 @@ class LoginView(APIView):
 
         serializer = serializer_class(data=request.data.get("credentials", {}))
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data # Get authenticated user
-        tokens = RefreshToken.for_user(user) # Generate tokens
+        user = serializer.validated_data
+        token = AccessToken.for_user(user)
 
         response = Response({
             "message": "Login successful",
-            "refresh": str(tokens), # Return refresh token in response
         }, status=status.HTTP_200_OK)
 
         # Set JWT access token in HttpOnly Secure Cookie
         response.set_cookie(
-            key=settings.SIMPLE_JWT["AUTH_COOKIE"],  # Cookie Name
-            value=str(tokens.access_token),  # Save access token
-            httponly=settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"],  # Secure Cookie
-            secure=settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"],  # HTTPS-only
-            samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],  # Cross-site protection
-            max_age=60 * 60 * 24,  # Valid for 1 day
+            key=settings.SIMPLE_JWT["AUTH_COOKIE"],
+            value=str(token),
+            path=settings.SIMPLE_JWT["AUTH_COOKIE_PATH"],
+            httponly=settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"],
+            secure=settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"],
+            samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"], 
+            max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
         )
 
-        # Retrieve the business associated with the current user
-        business = Business.objects.filter(owner=user).first()
-
-        # If a business is found, fetch and save the latest Square sales data
-        if business:
-            fetch_and_save_square_sales_data(business)
-            response.set_cookie(
-                key="business_id",
-                value=str(business.id),
-                path="/",
-                httponly=True,
-                secure=True,
-                samesite="None",
-            )
-
-        # Return the refresh token in the response (frontend can store it securely)
         return response
 
 class UserProfileView(APIView):
@@ -132,16 +115,17 @@ class UserProfileView(APIView):
         Retrieves user profile details from the authenticated request.
         """
         user = request.user
+        business = Business.objects.filter(owner=user).first()
         return Response({
             "email": user.email,
             "name": user.name,
-            "role": user.role
+            "role": user.role,
+            "business_id": business.id if business else None,
         })
 
 class LogoutView(APIView):
     """
     API for user logout.
-    - Invalidates the refresh token
     - Deletes the access token from HttpOnly Cookie
     """
     permission_classes = [IsAuthenticated]
@@ -149,34 +133,16 @@ class LogoutView(APIView):
     @extend_schema(**logout_schema)
     def post(self, request):
         """
-        Handles user logout by blacklisting the refresh token.
-        - Also removes JWT access token from HttpOnly Cookie.
+        Handles user logout by removing JWT access token from HttpOnly Cookie.
         """
         response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
 
         # Delete JWT access token from cookies
-        response.set_cookie(
-            key=settings.SIMPLE_JWT["AUTH_COOKIE"],
-            value="",
-            httponly=settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"],
-            secure=settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"],
+        response.delete_cookie(
+            settings.SIMPLE_JWT["AUTH_COOKIE"],
+            path=settings.SIMPLE_JWT["AUTH_COOKIE_PATH"],
             samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],
-            expires="Thu, 01 Jan 1970 00:00:00 GMT",
-            max_age=0,
         )
-
-        # Remove Refresh Token from HttpOnly Cookie
-        response.delete_cookie("refresh_token")
-        response.delete_cookie("business_id") 
-
-        # Blacklist the refresh token (optional, only if using blacklisting)
-        refresh_token = request.data.get("refresh")
-        if refresh_token:
-            try:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            except Exception as e:
-                logger.error(f"❌ Failed to blacklist refresh token: {e}")
 
         return response
 
