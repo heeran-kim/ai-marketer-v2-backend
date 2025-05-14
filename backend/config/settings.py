@@ -76,6 +76,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is not set.")
 
+TEMP_MEDIA_DISCORD_WEBHOOK = os.getenv("TEMP_MEDIA_DISCORD_WEBHOOK", "False") == "True"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -177,7 +178,7 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
     "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
-    if os.getenv("USE_RENDER_DB") == "true"
+    if os.getenv("USE_RENDER_DB", "False") == "True"
     else {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("POSTGRES_DB"),

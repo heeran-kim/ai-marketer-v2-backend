@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
 from django.utils import timezone
 from itertools import chain
+from config import settings
 from promotions.models import Promotion
 from posts.serializers import PostSerializer
 from businesses.models import Business
@@ -13,6 +14,7 @@ from social.models import SocialMedia
 from posts.models import Post, Category
 from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
 from utils.square_api import get_square_menu_items
+from utils.discord_api import upload_image_file_to_discord
 import logging
 import requests
 import os
@@ -87,7 +89,7 @@ class PostListCreateView(ListCreateAPIView):
         posts_data = media_data.get("data")
         return {"message": posts_data, "status": True}
     
-    def save_meta_image(self, post_data, save_path,platform):
+    def save_meta_image(self, post_data, save_path, platform):
         media_type=post_data.get('media_type') if platform=="instagram" else "IMAGE" #Image for facebook
         image_url=None
         if media_type == "IMAGE" or media_type == "CAROUSEL_ALBUM":
@@ -100,9 +102,13 @@ class PostListCreateView(ListCreateAPIView):
         response = requests.get(image_url)
 
         if response.status_code == 200:
-            with open(save_path, 'wb') as f:
-                f.write(response.content)
-            return save_path
+            if settings.TEMP_MEDIA_DISCORD_WEBHOOK:
+                discord_image_url = upload_image_file_to_discord(response.content)['image_url']
+                return discord_image_url
+            else:
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                return save_path
         else:
             return "/app/media/No_Image_Available.jpg"
 
@@ -315,7 +321,6 @@ class PostListCreateView(ListCreateAPIView):
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
         return resized
 
-
     def upload_image_file(self,image_file,aspectRatio):
         #Get Image setup
         headers = {
@@ -424,10 +429,8 @@ class PostListCreateView(ListCreateAPIView):
             link = None
             post_status = "Scheduled"
         else :
-            # TODO
             scheduled_at = None
             posted_at = timezone.now()
-            link = "test.com"
             post_status = "Published"
 
         image_url=self.upload_image_file(request.FILES.get('image'),data.get("aspect_ratio","4/5"))
@@ -461,8 +464,6 @@ class PostListCreateView(ListCreateAPIView):
                     if (response.get("status") == False):
                         return Response({"error": response.get("error")}, status=status.HTTP_400_BAD_REQUEST)   #Then no post id was provided
                     link=response.get("message")
-            case 'twitter':
-                return Response({"error": "Not implemented"}, status=status.HTTP_400_BAD_REQUEST)
             case _:
                 return Response({"error": "Invalid platform"}, status=status.HTTP_400_BAD_REQUEST)
         

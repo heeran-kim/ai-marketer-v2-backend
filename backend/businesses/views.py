@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from sales.models import SalesDataPoint
 from config import settings
 from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
+from utils.discord_api import upload_image_file_to_discord
 from .models import Business
 from .serializers import BusinessSerializer
 from social.models import SocialMedia
@@ -31,11 +32,7 @@ class DashboardView(APIView):
                 "posts_summary": None
             })
 
-        logo_field = business.logo
-        if not logo_field:
-            logo_path = 'defaults/default_logo.png'
-        else:
-            logo_path = logo_field
+        logo_path = business.logo
 
         linked_platforms = []
         platforms = SocialMedia.objects.filter(business=business)
@@ -126,26 +123,28 @@ class BusinessDetailView(APIView):
         business = Business.objects.filter(owner=request.user).first()
 
         # Handle file upload
-        if 'logo' in request.FILES:
-            logo_file = request.FILES['logo']
-            is_valid, error_message = self._validate_logo_file(logo_file)
-            if not is_valid:
-                return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+        if 'logo' in request.FILES:        
+            if settings.TEMP_MEDIA_DISCORD_WEBHOOK:
+                logo = upload_image_file_to_discord(request.FILES['logo'])['image_url']
+                if not logo:
+                    return Response({"error": "Failed to upload logo"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                logo = request.FILES['logo']
 
             # Logo-only update or creation
             if not business:
                 business = Business(owner=request.user)
-                business.logo = logo_file
+                business.logo = logo
                 business.save()
                 return Response(business, status=status.HTTP_201_CREATED)
             else:
-                business.logo = logo_file
+                business.logo = logo
                 business.save(update_fields=['logo'])
                 return Response({"message": "Logo updated successfully"}, status=status.HTTP_200_OK)
 
         if request.data.get('logo_removed') == 'true' and business:
-            if business.logo:
-                business.logo.delete(save=False)
+            if business.logo and not settings.TEMP_MEDIA_DISCORD_WEBHOOK:
+                    business.logo.delete(save=False)
 
             business.logo = None
             business.save(update_fields=['logo'])
@@ -164,11 +163,6 @@ class BusinessDetailView(APIView):
                 return Response(serializer.data)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _validate_logo_file(self, logo_file):
-        """Validate logo file size and type."""
-        # Validation logic here...
-        return True, None
     
 
 class SquareViewSet(viewsets.ViewSet):
