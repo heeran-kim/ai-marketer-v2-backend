@@ -109,9 +109,6 @@ def generate_captions(
         business_info,
         item_info,
         additional_prompt="",
-        include_sales_data=False,
-        detected_items=None,
-        image_url=None,
     ):
     """
     Generate captions using OpenAI API.
@@ -121,9 +118,6 @@ def generate_captions(
         business_info (Dict): Business target customers and vibe
         item_info (List[Dict]): List of items with name and description
         additional_prompt (str, optional): Additional context for caption
-        include_sales_data (bool): Whether to include sales data
-        detected_items (List[str], optional): List of detected items from image
-        image (File, optional): Image file for analysis
     
     Returns:
         List[str]: List of generated captions
@@ -148,7 +142,6 @@ def generate_captions(
     Featured Items:
     {', '.join([f"{item['name']}: {item['description']}" for item in item_info]) if item_info else 'No featured items'}
 
-    {f'Detected in Image: {", ".join(detected_items)}' if detected_items else ''}
     {f'Additional Context: {additional_prompt}' if additional_prompt else ''}
     """
 
@@ -167,13 +160,6 @@ def generate_captions(
                     "type": "text",
                     "text": prompt
                 },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url,
-                        "detail": "low"
-                    }
-                } if image_url else None,
           ],
         }
     ]

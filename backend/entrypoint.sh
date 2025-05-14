@@ -32,6 +32,6 @@ echo "Flushing database..."
 python manage.py flush --noinput # Comment if you dont want to flush the database
 
 echo "Loading fixture data..."
-python manage.py loaddata users/fixtures/mock_users.json businesses/fixtures/mock_businesses.json social/fixtures/mock_social.json
+python manage.py loaddata users/fixtures/mock_users.json businesses/fixtures/mock_businesses.json
 
 exec "$@"
