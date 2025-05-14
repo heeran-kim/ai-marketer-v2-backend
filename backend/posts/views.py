@@ -218,6 +218,9 @@ class PostListCreateView(ListCreateAPIView):
             for linked_platform in linked_platforms_queryset
         ]
 
+        if len(linked_platforms) == 0:
+            return Post.objects.none()
+
         # Check if the business is linked to Facebook
         if any(platform["key"] == "facebook" for platform in linked_platforms):
             self.meta_get_function(business,'facebook')
@@ -245,14 +248,24 @@ class PostListCreateView(ListCreateAPIView):
         return combined_posts
 
     def list(self, request, *args, **kwargs):
+        business = Business.objects.filter(owner=self.request.user).first()
+        linked_platforms_queryset = SocialMedia.objects.filter(business=business)
+        linked_platforms = [
+            {
+                "key": linked_platform.platform,
+                "label": next(
+                    (p["label"] for p in SOCIAL_PLATFORMS if p["key"] == linked_platform.platform),
+                    linked_platform.platform
+                ),
+            }
+            for linked_platform in linked_platforms_queryset
+        ]
+        linked = len(linked_platforms) > 0
+
         queryset = self.get_queryset()
-        serialized_posts = self.get_serializer(queryset, many=True).data
+        response_data = self.get_serializer(queryset, many=True).data
 
-        response_data = {
-            "posts": serialized_posts,
-        }
-
-        return Response(response_data, status=status.HTTP_200_OK)
+        return Response({"linked": linked, "posts": response_data}, status=status.HTTP_200_OK)
     
     def get_facebook_page_id(self,access_token):
         #Retrieve facebook page id data from Meta's API
