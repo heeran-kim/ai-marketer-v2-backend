@@ -6,23 +6,23 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView
 from django.utils import timezone
 from itertools import chain
-from config import settings
+from django.conf import settings
+
+from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
 from promotions.models import Promotion
 from posts.serializers import PostSerializer
 from businesses.models import Business
 from social.models import SocialMedia
 from posts.models import Post, Category
-from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
 from utils.square_api import get_square_menu_items
 from utils.discord_api import upload_image_file_to_discord
-import logging
+
 import requests
-import os
 from PIL import Image
 import io
 from datetime import datetime
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from config.celeryTasks import publish_to_meta_task,publishToMeta
 from celery.result import AsyncResult
 from django.utils import timezone
@@ -31,9 +31,10 @@ from django.core.files import File
 
 from cryptography.fernet import Fernet #cryptography package
 
-TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
-IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
+TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
+IMGUR_CLIENT_ID = settings.IMGUR_CLIENT_ID
 
+import logging
 logger = logging.getLogger(__name__)
 
 class PostListCreateView(ListCreateAPIView):

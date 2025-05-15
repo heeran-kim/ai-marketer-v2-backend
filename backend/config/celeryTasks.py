@@ -1,19 +1,10 @@
 from celery import shared_task
 from datetime import datetime
-import logging
-from posts.views import ListCreateAPIView
 from cryptography.fernet import Fernet #cryptography package
 import requests
-import os
-from PIL import Image
-import io
 
+import logging
 logger = logging.getLogger(__name__)
-
-
-
-TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
-IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
 def get_facebook_page_id(access_token):
     #Retrieve facebook page id data from Meta's API

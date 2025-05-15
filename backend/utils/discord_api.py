@@ -1,14 +1,14 @@
+from django.conf import settings
 import os
 import requests
 import logging
-
 logger = logging.getLogger(__name__)
 
 def get_discord_webhook_url():
     """
     Get the Discord webhook URL from environment variables.
     """
-    return os.getenv("DISCORD_WEBHOOK_URL")
+    return settings.DISCORD_WEBHOOK_URL
 
 def upload_image_file_to_discord(image_file):
     """

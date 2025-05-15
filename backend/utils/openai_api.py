@@ -1,6 +1,6 @@
 import json
 import logging
-from config import settings
+from django.conf import settings
 from openai import OpenAI
 from openai import OpenAIError
 

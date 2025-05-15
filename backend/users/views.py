@@ -4,38 +4,27 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
-from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import AccessToken
+
+from django.conf import settings
+from django.http import JsonResponse
 
 from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
-from rest_framework_simplejwt.tokens import AccessToken
-from django.conf import settings
-from drf_spectacular.utils import extend_schema
-from .schemas import register_schema, login_schema, me_schema, logout_schema, forgot_password_schema, reset_password_schema
-
 from businesses.models import Business
-from utils.square_api import fetch_and_save_square_sales_data
 
 from cryptography.fernet import Fernet #cryptography package
-
-from django.http import JsonResponse
 import pyotp
 import qrcode
 import base64
-import os
 from io import BytesIO
 
-
-# Get the custom User model
-User = get_user_model()
-
-TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
 
 # Setup logger for debugging and tracking requests
 import logging
 logger = logging.getLogger(__name__)
 
 
-@extend_schema(**register_schema)
 class RegisterView(generics.CreateAPIView):
     """
     API for user registration
@@ -70,7 +59,6 @@ class LoginView(APIView):
         }
         return strategy_map.get(self.request.data.get('method', 'traditional'))
 
-    @extend_schema(**login_schema)
     def post(self, request):
         """Handles user login requests dynamically and generates tokens"""
         serializer_class = self.get_serializer_class()
@@ -109,7 +97,6 @@ class UserProfileView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(**me_schema)
     def get(self, request):
         """
         Retrieves user profile details from the authenticated request.
@@ -130,7 +117,6 @@ class LogoutView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(**logout_schema)
     def post(self, request):
         """
         Handles user logout by removing JWT access token from HttpOnly Cookie.
@@ -152,7 +138,6 @@ class ForgotPasswordView(GenericAPIView):
     parser_classes = [JSONParser]
     serializer_class = ForgotPasswordSerializer
 
-    @extend_schema(**forgot_password_schema)
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -165,7 +150,6 @@ class ResetPasswordView(GenericAPIView):
     parser_classes = [JSONParser]
     serializer_class = ResetPasswordSerializer
 
-    @extend_schema(**reset_password_schema)
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

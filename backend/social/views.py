@@ -3,29 +3,24 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
-from businesses.models import Business
+from django.conf import settings
+
 from .models import SocialMedia
 from .serializers import SocialMediaSerializer
-import logging
-from drf_spectacular.utils import extend_schema
-from .schemas import social_accounts_list_schema, social_disconnect_schema, social_connect_schema, oauth_callback_schema
-import os
+from businesses.models import Business
+
 import requests
 
 from cryptography.fernet import Fernet #cryptography package
 
-
-
-
-TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
-
 # Setup logger for debugging and tracking requests
+import logging
 logger = logging.getLogger(__name__)
 
-#For Facebook API ID
-FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
-FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
-FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
+FACEBOOK_APP_ID = settings.FACEBOOK_APP_ID
+FACEBOOK_SECRET = settings.FACEBOOK_SECRET
+FACEBOOK_REDIRECT_URI = settings.FACEBOOK_REDIRECT_URI
 
 class LinkedSocialAccountsView(APIView):
     """
@@ -33,7 +28,6 @@ class LinkedSocialAccountsView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(**social_accounts_list_schema)
     def get(self, request):
         business = Business.objects.filter(owner=request.user).first()
         linked_platforms_queryset = SocialMedia.objects.filter(business=business)
@@ -45,7 +39,6 @@ class ConnectSocialAccountView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
-    @extend_schema(**social_connect_schema)
     def post(self, request, provider):
         # TODO: Implement logic to generate OAuth URL for the social media provider
         # business = Business.objects.filter(owner=request.user).first()
@@ -188,7 +181,6 @@ class OAuthCallbackView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
-    @extend_schema(**oauth_callback_schema)
     def get(self, request,provider):
         # TODO: Implement logic to process the OAuth callback and store access token
         return Response({"message": "OAuth callback handling is not yet implemented."}, status=status.HTTP_501_NOT_IMPLEMENTED)
@@ -196,7 +188,6 @@ class OAuthCallbackView(APIView):
 class DisconnectSocialAccountView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(**social_disconnect_schema)
     def delete(self, request, provider):
         business = Business.objects.filter(owner=request.user).first()
         if not business:

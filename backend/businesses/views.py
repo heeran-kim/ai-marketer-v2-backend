@@ -1,18 +1,20 @@
 # backend/businesses/views.py
-from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from sales.models import SalesDataPoint
-from config import settings
-from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
-from utils.discord_api import upload_image_file_to_discord
+from django.shortcuts import redirect
+from django.conf import settings
+
 from .models import Business
 from .serializers import BusinessSerializer
+from sales.models import SalesDataPoint
 from social.models import SocialMedia
 from posts.models import Post
+from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
+from utils.discord_api import upload_image_file_to_discord
+
 import uuid
 import logging
 

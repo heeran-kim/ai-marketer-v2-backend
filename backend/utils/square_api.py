@@ -1,12 +1,14 @@
 # backend/utils/square_api.py
-from sales.models import SalesDataPoint
-from config import settings
-from businesses.serializers import SquareItemSerializer
+from django.conf import settings
+from django.db import transaction 
+
 from square.client import Client
+
+from sales.models import SalesDataPoint
+from businesses.serializers import SquareItemSerializer
+
 from datetime import datetime, timedelta
 from pytz import timezone
-from dateutil.parser import isoparse
-from django.db import transaction 
 from decimal import Decimal
 import base64
 import secrets

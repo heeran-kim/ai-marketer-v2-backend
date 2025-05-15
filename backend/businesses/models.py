@@ -1,6 +1,6 @@
 # backend/businesses/models.py
 from django.db import models
-from config import settings
+from django.conf import settings
 from users.models import User
 
 def business_logo_path(instance, filename):

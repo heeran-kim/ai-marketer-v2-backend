@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
-
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -11,18 +10,15 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from config import settings
 
 import pyotp
-import qrcode
-import os
 
 from cryptography.fernet import Fernet #cryptography package
 
 User = get_user_model() # AUTH_USER_MODEL = 'users.User'
 
 
-TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
+TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
 
 
 class RegisterSerializer(serializers.ModelSerializer):
