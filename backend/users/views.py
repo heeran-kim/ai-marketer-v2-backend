@@ -21,7 +21,6 @@ from .serializers import (
     ForgotPasswordSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
-    SocialLoginSerializer,
     TraditionalLoginSerializer,
     TwoFactorVerificationSerializer,
 )
@@ -45,7 +44,7 @@ class RegisterView(generics.CreateAPIView):
 
 class LoginView(APIView):
     """
-    Handles user authentication for multiple login methods.
+    Handles user authentication.
     Stores the access token in an HttpOnly Secure Cookie.
     """
     permission_classes = [AllowAny]
@@ -55,7 +54,6 @@ class LoginView(APIView):
         """Returns the appropriate serializer based on the login method"""
         strategy_map = {
             "traditional": TraditionalLoginSerializer,
-            "social": SocialLoginSerializer,
             "2fa": TwoFactorVerificationSerializer,
         }
         return strategy_map.get(self.request.data.get('method', 'traditional'))

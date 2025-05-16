@@ -59,25 +59,6 @@ class TraditionalLoginSerializer(serializers.Serializer):
 
         return user # Return the authenticated user
 
-class SocialLoginSerializer(serializers.Serializer):
-    """
-    Serializer for social login via OAuth2 providers (Google, Facebook, etc.).
-    This handles authentication using third-party access tokens.
-    """
-    provider = serializers.CharField() # Example: "google", "facebook"
-    access_token = serializers.CharField()
-
-    def validate(self, data):
-        """
-        Validate the provided access token with the respective OAuth provider.
-
-        - If the token is valid, retrieve the user associated with it.
-        - If no existing user is found, create a new one.
-        - Return the authenticated user.
-        """
-        # TODO: Implement provider-specific OAuth validation and user creation logic
-        pass
-
 class TwoFactorVerificationSerializer(serializers.Serializer):
     """
     Serializer for two-factor authentication (2FA) verification.
