@@ -1,5 +1,6 @@
 # promotions/models.py
 from django.db import models
+
 from businesses.models import Business
 
 class PromotionCategories(models.Model):

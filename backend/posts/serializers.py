@@ -1,7 +1,9 @@
 # posts/serializers.py
 from rest_framework import serializers
-from .models import Post
+
 from config.constants import SOCIAL_PLATFORMS
+
+from .models import Post
 
 class PostSerializer(serializers.ModelSerializer):
     platform = serializers.SerializerMethodField()

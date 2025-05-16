@@ -1,42 +1,43 @@
-from rest_framework.parsers import JSONParser
+# backend/users/views.py
+import base64
+from io import BytesIO
+import logging
+
+from cryptography.fernet import Fernet
+from django.conf import settings
+from django.http import JsonResponse
+import pyotp
+import qrcode
 from rest_framework import generics, status
+from rest_framework.generics import GenericAPIView
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.generics import GenericAPIView
 from rest_framework_simplejwt.tokens import AccessToken
 
-from django.conf import settings
-from django.http import JsonResponse
-
-from .serializers import RegisterSerializer, TraditionalLoginSerializer, SocialLoginSerializer, TwoFactorVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from businesses.models import Business
-
-from cryptography.fernet import Fernet #cryptography package
-import pyotp
-import qrcode
-import base64
-from io import BytesIO
+from .serializers import (
+    ForgotPasswordSerializer,
+    RegisterSerializer,
+    ResetPasswordSerializer,
+    SocialLoginSerializer,
+    TraditionalLoginSerializer,
+    TwoFactorVerificationSerializer,
+)
 
 TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
 
-# Setup logger for debugging and tracking requests
-import logging
 logger = logging.getLogger(__name__)
 
-
 class RegisterView(generics.CreateAPIView):
-    """
-    API for user registration
-    """
+    """API endpoint for registering a new user."""
     permission_classes = [AllowAny]
     parser_classes = [JSONParser]
     serializer_class = RegisterSerializer
 
     def create(self, request, *args, **kwargs):
-        """
-        Handles user registration.
-        """
+        """Creates a new user and returns a success message."""
         response = super().create(request, *args, **kwargs)
         response.data = {"message": "User created successfully"}
         return response
@@ -44,8 +45,8 @@ class RegisterView(generics.CreateAPIView):
 
 class LoginView(APIView):
     """
-    API for user authentication.
-    - Stores the access token in HttpOnly Secure Cookie
+    Handles user authentication for multiple login methods.
+    Stores the access token in an HttpOnly Secure Cookie.
     """
     permission_classes = [AllowAny]
     parser_classes = [JSONParser]
@@ -60,7 +61,7 @@ class LoginView(APIView):
         return strategy_map.get(self.request.data.get('method', 'traditional'))
 
     def post(self, request):
-        """Handles user login requests dynamically and generates tokens"""
+        """Processes login and sets JWT access token cookie."""
         serializer_class = self.get_serializer_class()
         if not serializer_class:
             return Response(

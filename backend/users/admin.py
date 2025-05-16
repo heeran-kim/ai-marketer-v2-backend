@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+
 from .models import User, EmailConfiguration  # We'll add EmailConfiguration to your models
 
 class UserAdmin(BaseUserAdmin):

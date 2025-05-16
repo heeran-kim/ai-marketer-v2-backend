@@ -1,19 +1,18 @@
 # backend/utils/square_api.py
-from django.conf import settings
-from django.db import transaction 
-
-from square.client import Client
-
-from sales.models import SalesDataPoint
-from businesses.serializers import SquareItemSerializer
-
-from datetime import datetime, timedelta
-from pytz import timezone
-from decimal import Decimal
 import base64
+from datetime import datetime, timedelta
+from decimal import Decimal
+import logging
 import secrets
 import requests
-import logging
+
+from django.conf import settings
+from django.db import transaction 
+from pytz import timezone
+from square.client import Client
+
+from businesses.serializers import SquareItemSerializer
+from sales.models import SalesDataPoint
 
 logger = logging.getLogger(__name__)
 

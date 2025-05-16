@@ -1,26 +1,26 @@
 # backend/sales/views.py
-import re
-from rest_framework.views import APIView
+from collections import defaultdict
+import datetime
+from decimal import Decimal
+import logging
+import os
+
+from django.db import transaction 
+from django.db.models import Sum, Avg
+from django.utils import timezone
+import pandas as pd
+from pandas.errors import EmptyDataError
+from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from django.db.models import Sum, Avg
+from rest_framework.views import APIView
 
-from utils.square_api import fetch_and_save_square_sales_data
 from businesses.models import Business
+from utils.square_api import fetch_and_save_square_sales_data
+
 from .models import SalesData, SalesDataPoint
-from django.db import transaction 
 
-import os
-import pandas as pd
-from pandas.errors import EmptyDataError
-import datetime
-from django.utils import timezone
-from decimal import Decimal
-from collections import defaultdict
-
-import logging
 logger = logging.getLogger(__name__)
 
 class SalesDataView(APIView):

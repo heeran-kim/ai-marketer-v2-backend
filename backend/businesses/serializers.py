@@ -1,5 +1,6 @@
 # backend/businesses/serializers.py
 from rest_framework import serializers
+
 from .models import Business
 
 class BusinessSerializer(serializers.ModelSerializer):

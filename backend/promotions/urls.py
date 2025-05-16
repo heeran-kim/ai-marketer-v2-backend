@@ -1,6 +1,7 @@
 # promotions/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import PromotionViewSet
 
 # Set up a router to automatically generate URL patterns for the PromotionViewSet

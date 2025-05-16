@@ -1,5 +1,17 @@
+# backend/users/urls.py
 from django.urls import path
-from .views import RegisterView, LoginView, UserProfileView, LogoutView, ForgotPasswordView, ResetPasswordView,Check2FA,Remove2FA,Enable2FA
+
+from .views import (
+    Check2FA,
+    Enable2FA,
+    ForgotPasswordView,
+    LoginView,
+    LogoutView,
+    RegisterView,
+    Remove2FA,
+    ResetPasswordView,
+    UserProfileView,
+)
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),

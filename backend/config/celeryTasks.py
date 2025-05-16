@@ -1,9 +1,9 @@
-from celery import shared_task
 from datetime import datetime
-from cryptography.fernet import Fernet #cryptography package
+import logging
+
+from celery import shared_task
 import requests
 
-import logging
 logger = logging.getLogger(__name__)
 
 def get_facebook_page_id(access_token):

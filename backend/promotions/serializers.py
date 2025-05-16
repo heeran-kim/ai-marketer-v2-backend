@@ -1,14 +1,15 @@
 # promotions/serializers.py
+from datetime import timedelta
+import logging
+
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Promotion, PromotionSuggestion, PromotionCategories
 from posts.serializers import PostSerializer
 from sales.models import SalesDataPoint
 
-from django.utils import timezone
-from django.db.models import Sum
-from datetime import timedelta
-import logging
+from .models import Promotion, PromotionSuggestion, PromotionCategories
 
 logger = logging.getLogger(__name__)
 

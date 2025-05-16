@@ -1,7 +1,9 @@
-from django.conf import settings
+import logging
 import os
 import requests
-import logging
+
+from django.conf import settings
+
 logger = logging.getLogger(__name__)
 
 def get_discord_webhook_url():
@@ -21,7 +23,6 @@ def upload_image_file_to_discord(image_file):
     message_id = None
     image_url = None
     
-    logger.info("Uploading image to Discord.")
     temp_file_path = f"/tmp/{image_file.name}"
     with open(temp_file_path, 'wb+') as temp_file:
         for chunk in image_file.chunks():

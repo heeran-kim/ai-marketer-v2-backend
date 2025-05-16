@@ -1,22 +1,31 @@
 # backend/businesses/views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+import logging
+import uuid
+from collections import defaultdict
+
+from django.conf import settings
+from django.shortcuts import redirect
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from django.shortcuts import redirect
-from django.conf import settings
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Business
 from .serializers import BusinessSerializer
+from posts.models import Post
 from sales.models import SalesDataPoint
 from social.models import SocialMedia
-from posts.models import Post
-from utils.square_api import exchange_code_for_token, fetch_and_save_square_sales_data, get_auth_url_values, get_square_client, get_square_locations, process_square_item
-from utils.discord_api import upload_image_file_to_discord
 
-import uuid
-import logging
+from utils.discord_api import upload_image_file_to_discord
+from utils.square_api import (
+    exchange_code_for_token,
+    fetch_and_save_square_sales_data,
+    get_auth_url_values,
+    get_square_client,
+    get_square_locations,
+    process_square_item,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +42,6 @@ class DashboardView(APIView):
                 "linked_platforms": [],
                 "posts_summary": None
             })
-
-        logo_path = business.logo
 
         linked_platforms = []
         platforms = SocialMedia.objects.filter(business=business)
@@ -62,7 +69,6 @@ class DashboardView(APIView):
             "num_failed": posts.filter(status="Failed").count(),
         }
 
-        from collections import defaultdict
         published_posts = posts.filter(status="Published").order_by("-posted_at")
         
         platforms_by_datetime = defaultdict(list)
@@ -177,6 +183,7 @@ class SquareViewSet(viewsets.ViewSet):
         """Check if Square integration is connected for the authenticated user's business."""
         business = Business.objects.filter(owner=request.user).first()
         if not business:
+            logger.warning("⚠️ User %s attempted to access posts without a business", request.user.email)
             return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
 
         client = get_square_client(business)
@@ -243,7 +250,6 @@ class SquareViewSet(viewsets.ViewSet):
         business = Business.objects.filter(owner=request.user).first()
         business.square_access_token = access_token
         business.save()
-        logger.info(f"Square access token: {access_token}")
 
         # After saving access token, fetch and save the sales data
         fetch_and_save_square_sales_data(business)

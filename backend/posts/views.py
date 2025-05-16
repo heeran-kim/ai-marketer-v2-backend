@@ -1,40 +1,35 @@
+import io
 import json
+import logging
+from datetime import datetime
+from itertools import chain
+
+from celery.result import AsyncResult
+from cryptography.fernet import Fernet #cryptography package
+from django.conf import settings
+from django.core.files import File
+from django.utils import timezone
+from PIL import Image
+import requests
+from rest_framework import status
+from rest_framework.generics import ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
 from rest_framework.views import APIView
-from rest_framework.generics import ListCreateAPIView
-from django.utils import timezone
-from itertools import chain
-from django.conf import settings
 
-from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
-from promotions.models import Promotion
-from posts.serializers import PostSerializer
 from businesses.models import Business
-from social.models import SocialMedia
-from posts.models import Post, Category
-from utils.square_api import get_square_menu_items
-from utils.discord_api import upload_image_file_to_discord
-
-import requests
-from PIL import Image
-import io
-from datetime import datetime
-
-from datetime import datetime
 from config.celeryTasks import publish_to_meta_task,publishToMeta
-from celery.result import AsyncResult
-from django.utils import timezone
-
-from django.core.files import File
-
-from cryptography.fernet import Fernet #cryptography package
+from config.constants import POST_CATEGORIES_OPTIONS, SOCIAL_PLATFORMS
+from posts.models import Post, Category
+from posts.serializers import PostSerializer
+from promotions.models import Promotion
+from social.models import SocialMedia
+from utils.discord_api import upload_image_file_to_discord
+from utils.square_api import get_square_menu_items
 
 TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
 IMGUR_CLIENT_ID = settings.IMGUR_CLIENT_ID
 
-import logging
 logger = logging.getLogger(__name__)
 
 class PostListCreateView(ListCreateAPIView):
@@ -391,10 +386,8 @@ class PostListCreateView(ListCreateAPIView):
                 "items": [],
                 }
             
-            logger.debug(f"Checking Square integration for business: {business.id}")
             try: 
                 square_integration_status = get_square_menu_items(business)
-                logger.debug(f"Square integration status: {square_integration_status}")
             except Exception as e:
                 logger.error(f"Error checking Square integration: {e}")
 
@@ -409,7 +402,6 @@ class PostListCreateView(ListCreateAPIView):
                 "linked_platforms": linked_platforms,
             }
 
-            logger.debug(f"Response data for business {business.id}: {response_data}")
             return Response(response_data)
 
         return self.list(request, *args, **kwargs)

@@ -1,7 +1,9 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
-from .managers import UserManager
+
 from config.constants import ROLE_CHOICES, DEFAULT_ROLE
+
+from .managers import UserManager
 
 class User(AbstractBaseUser, PermissionsMixin):
     """Custom User model using email as the unique identifier."""

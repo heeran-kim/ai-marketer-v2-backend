@@ -1,26 +1,26 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
+# backend/social/views.py
+import logging
+import requests
+
+from cryptography.fernet import Fernet
+from django.conf import settings
 from rest_framework import status
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from businesses.models import Business
 
 from .models import SocialMedia
 from .serializers import SocialMediaSerializer
-from businesses.models import Business
-
-import requests
-
-from cryptography.fernet import Fernet #cryptography package
-
-# Setup logger for debugging and tracking requests
-import logging
-logger = logging.getLogger(__name__)
 
 TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
 FACEBOOK_APP_ID = settings.FACEBOOK_APP_ID
 FACEBOOK_SECRET = settings.FACEBOOK_SECRET
 FACEBOOK_REDIRECT_URI = settings.FACEBOOK_REDIRECT_URI
+
+logger = logging.getLogger(__name__)
 
 class LinkedSocialAccountsView(APIView):
     """

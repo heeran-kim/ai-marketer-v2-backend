@@ -1,5 +1,12 @@
 from django.urls import path
-from .views import LinkedSocialAccountsView, ConnectSocialAccountView, OAuthCallbackView, DisconnectSocialAccountView, FinalizeOauthView
+
+from .views import (
+    ConnectSocialAccountView,
+    DisconnectSocialAccountView,
+    FinalizeOauthView,
+    LinkedSocialAccountsView,
+    OAuthCallbackView,
+)
 
 urlpatterns = [
     # Fetch linked accounts

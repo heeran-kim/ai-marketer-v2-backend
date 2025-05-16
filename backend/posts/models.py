@@ -1,9 +1,10 @@
 # posts/models.py
 from django.db import models
+
 from businesses.models import Business
-from social.models import SocialMedia
+from config.constants import POST_STATUS_OPTIONS
 from promotions.models import Promotion
-from config.constants import POST_CATEGORIES_OPTIONS, POST_STATUS_OPTIONS
+from social.models import SocialMedia
 
 def post_image_path(instance, filename):
     return f'business_posts/{instance.business.id}/{instance.id}.jpg'

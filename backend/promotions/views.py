@@ -1,21 +1,22 @@
 # promotions/views.py
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+from datetime import datetime, timedelta
+from decimal import Decimal
+import logging
+
+from django.db.models import Sum, Min, Max
+from pytz import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from businesses.models import Business
+from sales.models import SalesDataPoint
+from utils.openai_api import generate_promotions
+from utils.square_api import get_square_menu_items
 
 from .models import Promotion, PromotionCategories, PromotionSuggestion
 from .serializers import PromotionSerializer, SuggestionSerializer
-from businesses.models import Business
-from sales.models import SalesDataPoint
-from utils.square_api import get_square_menu_items
-from utils.openai_api import generate_promotions
-
-from datetime import datetime, timedelta
-from pytz import timezone
-from decimal import Decimal
-from django.db.models import Sum, Min, Max
-import logging
 
 logger = logging.getLogger(__name__)
 

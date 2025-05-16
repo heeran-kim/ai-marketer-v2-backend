@@ -1,25 +1,19 @@
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from django.contrib.auth import authenticate
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
-from django.core.mail import send_mail
+# backend/users/serializers.py
+from cryptography.fernet import Fernet
 from django.conf import settings
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
-
+from django.core.mail import send_mail
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import pyotp
+from rest_framework import serializers
 
-from cryptography.fernet import Fernet #cryptography package
-
-User = get_user_model() # AUTH_USER_MODEL = 'users.User'
-
+User = get_user_model()
 
 TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
-
 
 class RegisterSerializer(serializers.ModelSerializer):
     """

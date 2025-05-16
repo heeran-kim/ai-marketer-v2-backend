@@ -1,5 +1,6 @@
 # backend/sales/models.py
 from django.db import models
+
 from businesses.models import Business
 
 def sales_file_path(instance, filename):

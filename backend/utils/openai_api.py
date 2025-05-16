@@ -1,5 +1,6 @@
 import json
 import logging
+
 from django.conf import settings
 from openai import OpenAI
 from openai import OpenAIError
@@ -56,8 +57,6 @@ def generate_promotions(payload):
     {feedback_context}
     """
 
-    logger.debug(prompt)
-
     # Construct the input for the API
     input_data = [
         {
@@ -92,7 +91,6 @@ def generate_promotions(payload):
             try:
                 promotion_list = json.loads(result)
                 promotions.extend(promotion_list)
-                logger.debug(promotion_list)
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding response: {e}")
                 raise Exception(f"Error parsing promotion response: {e}")
@@ -145,8 +143,6 @@ def generate_captions(
     {f'Additional Context: {additional_prompt}' if additional_prompt else ''}
     """
 
-    logger.debug(f"Generated prompt: {prompt}")
-
     # Construct the input for the API
     input_data = [
         {
@@ -176,7 +172,6 @@ def generate_captions(
             max_tokens=150,
         )
         
-        logger.info(response)
         # Extract captions from response
         captions = [choice.message.content.strip() for choice in response.choices]
         return captions
