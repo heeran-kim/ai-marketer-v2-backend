@@ -35,3 +35,12 @@ class BusinessSerializer(serializers.ModelSerializer):
         if value and len(value) > 32:
             raise serializers.ValidationError("Vibe description cannot exceed 32 characters.")
         return value
+    
+
+class PlaceIDLookupSerializer(serializers.Serializer):
+    place_id = serializers.CharField(required=True)
+    
+class BusinessDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Business
+        fields = ['id', 'name', 'category', 'logo_url', 'place_id', 'address', 'phone', 'website']

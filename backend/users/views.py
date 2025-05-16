@@ -1,5 +1,5 @@
 from rest_framework.parsers import JSONParser
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -118,7 +118,9 @@ class UserProfileView(APIView):
         return Response({
             "email": user.email,
             "name": user.name,
-            "role": user.role
+            "role": user.role,
+            "has_password": user.has_password,
+            
         })
 
 class LogoutView(APIView):
@@ -256,3 +258,46 @@ class Enable2FA(APIView):
 
         return JsonResponse({"qr_code": f"data:image/png;base64,{qr_base64}"})
 
+# delete account
+
+
+class DeleteAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def delete(self, request):
+        try:
+            user = request.user
+            user_id = user.id  # Store for logging
+            
+            print(f"Deleting account for user: {user_id}")  # Debug log
+            
+            # Deactivate the user
+            user.is_active = False
+            user.save()
+            
+            print(f"User {user_id} deactivated successfully")  # Debug log
+            
+            # Clear the authentication cookie
+            response = Response({"message": "Account deleted successfully"})
+            
+            # Make sure to delete the cookie with all required parameters
+            response.delete_cookie(
+                settings.SIMPLE_JWT["AUTH_COOKIE"],
+                path=settings.SIMPLE_JWT.get("AUTH_COOKIE_PATH", "/"),
+                domain=settings.SIMPLE_JWT.get("AUTH_COOKIE_DOMAIN", None),
+                samesite=settings.SIMPLE_JWT.get("AUTH_COOKIE_SAMESITE", None),
+            )
+            
+            print(f"Auth cookie cleared for user {user_id}")  # Debug log
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error deleting account: {str(e)}")  # Debug log
+            return Response(
+                {"error": f"Failed to delete account: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+ 

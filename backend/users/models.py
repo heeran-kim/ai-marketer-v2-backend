@@ -18,7 +18,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(auto_now_add=True) # Stores when the user registered
     requires_2fa = models.BooleanField(default=False) # Boolean for if the user is using 2FA
     secret_2fa = models.CharField(max_length=255,blank=True,null=True) #The field for storing the TOTP
-
+    
+    access_token = models.CharField(max_length=512, blank=True, null=True) 
+    has_password = models.BooleanField(default=True)  # If user has set a password
+    google_id = models.CharField(max_length=255, blank=True, null=True)
+    facebook_id = models.CharField(max_length=255, blank=True, null=True)
+    apple_id = models.CharField(max_length=255, blank=True, null=True)
+    
     objects = UserManager() # Assign custom UserManager for object creation
 
     USERNAME_FIELD = "email" # Use email as the unique login field
@@ -38,3 +44,5 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.name
+    
+    

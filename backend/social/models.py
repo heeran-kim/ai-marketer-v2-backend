@@ -1,9 +1,9 @@
 from django.db import models
-from businesses.models import Business
+#from businesses.models import Business
 from config.constants import SOCIAL_PLATFORMS
 
 class SocialMedia(models.Model):
-    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="social_media_links")
+    business = models.ForeignKey('businesses.Business', on_delete=models.CASCADE, related_name="social_media_links")
     platform = models.CharField(
         max_length=20,
         choices=[(platform["key"], platform["label"]) for platform in SOCIAL_PLATFORMS],
