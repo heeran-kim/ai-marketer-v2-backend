@@ -77,10 +77,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is not set.")
 
-IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
-if not IMGUR_CLIENT_ID:
-    raise ValueError("IMGUR_CLIENT_ID environment variable is not set.")
-
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 if not DISCORD_WEBHOOK_URL:
     raise ValueError("DISCORD_WEBHOOK_URL environment variable is not set.")
