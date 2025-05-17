@@ -1,6 +1,7 @@
 # promotions/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import PromotionViewSet
 
 # Set up a router to automatically generate URL patterns for the PromotionViewSet
@@ -17,6 +18,7 @@ router.register(r'', PromotionViewSet, basename='promotion')
 # - GET /{id}/      -> retrieve promotion
 # - PUT /{id}/      -> update promotion
 # - DELETE /{id}/   -> delete promotion
+# - GENERATE        -> generate promotion suggestions
 urlpatterns = [
     path('', include(router.urls)),
 ]

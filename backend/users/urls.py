@@ -1,7 +1,19 @@
+# backend/users/urls.py
 from django.urls import path
-from .views import RegisterView, LoginView, UserProfileView, LogoutView, ForgotPasswordView, ResetPasswordView,Check2FA,Remove2FA,Enable2FA,DeleteAccountView
-    
-from businesses.views import GooglePlaceLookupView  # import the view
+
+from .views import (
+    Check2FA,
+    Enable2FA,
+    ForgotPasswordView,
+    LoginView,
+    LogoutView,
+    RegisterView,
+    Remove2FA,
+    ResetPasswordView,
+    UserProfileView,
+    DeleteAccountView
+)
+
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -18,8 +30,6 @@ urlpatterns = [
 
     # New endpoints
     
-    path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
-
-    path('place-lookup/', GooglePlaceLookupView.as_view(), name='place-lookup')
+    path('delete-account/', DeleteAccountView.as_view(), name='delete-account')
 
 ]

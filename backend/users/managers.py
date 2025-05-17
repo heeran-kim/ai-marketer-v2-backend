@@ -1,6 +1,8 @@
-from django.contrib.auth.models import BaseUserManager
-from config.constants import ROLE_CHOICES, DEFAULT_ROLE
 import logging
+
+from django.contrib.auth.models import BaseUserManager
+
+from config.constants import ROLE_CHOICES, DEFAULT_ROLE
 
 logger = logging.getLogger(__name__)
 

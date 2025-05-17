@@ -1,23 +1,35 @@
 # backend/businesses/views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status, permissions
-from .models import Business
-from .serializers import BusinessSerializer, PlaceIDLookupSerializer, BusinessDetailsSerializer
-from social.models import SocialMedia
-from social.serializers import SocialMediaSerializer
-from posts.models import Post
-from django.conf import settings
 import logging
- # businesses/views.py
+import uuid
+from collections import defaultdict
 
-import requests
+from django.conf import settings
+from django.shortcuts import redirect
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import Business
+from .serializers import BusinessSerializer
+from posts.models import Post
+from sales.models import SalesDataPoint
+from social.models import SocialMedia
+
+from utils.discord_api import upload_image_file_to_discord
+from utils.square_api import (
+    exchange_code_for_token,
+    fetch_and_save_square_sales_data,
+    get_auth_url_values,
+    get_square_client,
+    get_square_locations,
+    process_square_item,
+)
 
 
 logger = logging.getLogger(__name__)
-
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -32,12 +44,6 @@ class DashboardView(APIView):
                 "linked_platforms": [],
                 "posts_summary": None
             })
-
-        logo_field = business.logo
-        if not logo_field:
-            logo_path = 'defaults/default_logo.png'
-        else:
-            logo_path = logo_field
 
         linked_platforms = []
         platforms = SocialMedia.objects.filter(business=business)
@@ -65,7 +71,6 @@ class DashboardView(APIView):
             "num_failed": posts.filter(status="Failed").count(),
         }
 
-        from collections import defaultdict
         published_posts = posts.filter(status="Published").order_by("-posted_at")
         
         platforms_by_datetime = defaultdict(list)
@@ -128,26 +133,28 @@ class BusinessDetailView(APIView):
         business = Business.objects.filter(owner=request.user).first()
 
         # Handle file upload
-        if 'logo' in request.FILES:
-            logo_file = request.FILES['logo']
-            is_valid, error_message = self._validate_logo_file(logo_file)
-            if not is_valid:
-                return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+        if 'logo' in request.FILES:        
+            if settings.TEMP_MEDIA_DISCORD_WEBHOOK:
+                logo = upload_image_file_to_discord(request.FILES['logo'])['image_url']
+                if not logo:
+                    return Response({"error": "Failed to upload logo"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                logo = request.FILES['logo']
 
             # Logo-only update or creation
             if not business:
                 business = Business(owner=request.user)
-                business.logo = logo_file
+                business.logo = logo
                 business.save()
-                return Response({"message": "Business created with logo"}, status=status.HTTP_201_CREATED)
+                return Response(business, status=status.HTTP_201_CREATED)
             else:
-                business.logo = logo_file
+                business.logo = logo
                 business.save(update_fields=['logo'])
                 return Response({"message": "Logo updated successfully"}, status=status.HTTP_200_OK)
 
         if request.data.get('logo_removed') == 'true' and business:
-            if business.logo:
-                business.logo.delete(save=False)
+            if business.logo and not settings.TEMP_MEDIA_DISCORD_WEBHOOK:
+                    business.logo.delete(save=False)
 
             business.logo = None
             business.save(update_fields=['logo'])
@@ -157,7 +164,7 @@ class BusinessDetailView(APIView):
         if not business:
             serializer = BusinessSerializer(data=request.data, context={'request': request})
             if serializer.is_valid():
-                serializer.save(owner=request.user)
+                business = serializer.save(owner=request.user)            
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             serializer = BusinessSerializer(business, data=request.data, partial=partial, context={'request': request})
@@ -166,84 +173,253 @@ class BusinessDetailView(APIView):
                 return Response(serializer.data)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _validate_logo_file(self, logo_file):
-        """Validate logo file size and type."""
-        # Validation logic here...
-        return True, None
     
+class SquareViewSet(viewsets.ViewSet):
+    """
+    ViewSet for managing Square integration.
+    """
+    permission_classes = [IsAuthenticated]
 
+    def list(self, request):
+        """Check if Square integration is connected for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            logger.warning("⚠️ User %s attempted to access posts without a business", request.user.email)
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
 
- 
+        client = get_square_client(business)
+        if not client:
+            return Response({"square_connected": False, "business_name": None})
+        
+        locations = get_square_locations(client)
+        if not locations:
+            return Response({"square_connected": True, "business_name": None})
+        
+        return Response({
+            "square_connected": True,
+            "business_name": locations[0].get("name")
+        })
 
-class GooglePlaceLookupView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    @action(detail=False, methods=['post'])
+    def connect(self, request):
+        """Connect Square integration for the authenticated user's business."""
+        auth_url_values = get_auth_url_values()
+        request.session['square_oauth_state'] = auth_url_values['state']
+
+        auth_url = (
+            f"{settings.SQUARE_BASE_URL}/oauth2/authorize"
+            f"?client_id={auth_url_values['app_id']}"
+            f"&scope=MERCHANT_PROFILE_READ+ITEMS_READ+ITEMS_WRITE+ORDERS_READ"
+            f"&session=false&state={auth_url_values['state']}"
+            f"&redirect_uri={auth_url_values['redirect_uri']}"
+        )
+        
+        return Response({"link": auth_url}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def callback(self, request):
+        """Create Square integration for the authenticated user's business."""
+        received_state = request.query_params.get('state')
+        saved_state = request.session.get('square_oauth_state')
+
+        # Ensure state matches and prevent CSRF
+        if not saved_state or received_state != saved_state:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=state_mismatch")        
+        error = request.query_params.get('error')
+        
+        # Handle error scenarios
+        if error:
+            error_description = request.query_params.get('error_description')
+            if ('access_denied' == error and 'user_denied' == error_description):
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=user_denied")
+            else:
+                return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=${error}&error_description=${error_description}")
+            
+        # Get the authorization code
+        code = request.query_params.get('code')
+        if not code:
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=missing_code")
+
+        # Exchange code for access token
+        token_response = exchange_code_for_token(code)
+        if 'access_token' not in token_response:
+            logger.info(f"Error: {token_response}")
+            return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?error=token_error")
+
+        # Save the access token to the business
+        access_token = token_response['access_token']
+        business = Business.objects.filter(owner=request.user).first()
+        business.square_access_token = access_token
+        business.save()
+
+        # After saving access token, fetch and save the sales data
+        fetch_and_save_square_sales_data(business)
+
+        # After successful connection, pop the state from the session
+        request.session.pop('square_oauth_state', None)
+        
+        return redirect(f"{settings.FRONTEND_BASE_URL}/settings/square?success=true")
     
-    def post(self, request):
+    @action(detail=False, methods=['post'])
+    def disconnect(self, request):
+        """Disconnect Square integration for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Remove the access token and disconnect the business
+        business.square_access_token = None
+        business.last_square_sync_at = None
+        business.save()
+
+        # Delete Square-originated sales data points
+        SalesDataPoint.objects.filter(business=business, source="square").delete()
+        
+        return Response({"message": "Square integration deleted successfully"}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'], url_path='items')
+    def list_items(self, request):
+        """Retrieve items from Square for the authenticated user's business."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        client = get_square_client(business)
+        if not client:
+            return Response({
+                "square_connected": False,
+                "items": [],
+                "categories": []
+            }, status=status.HTTP_200_OK)
+
         try:
-            serializer = PlaceIDLookupSerializer(data=request.data)
-            if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                
-            place_id = serializer.validated_data['place_id']
+            # Get catalog items
+            catalog_api = client.catalog
             
-            # Check if API key is configured
-            api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
-            if not api_key:
-                logger.error("Google Maps API key not found in settings")
-                return Response(
-                    {"error": "Google Maps API key not configured"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+            # Get categories
+            categories_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["CATEGORY"]
+            )
             
-            # Call Google Places API
-            url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=name,formatted_address,formatted_phone_number,website,types,photos&key={api_key}"
+            categories = []
+            if categories_response.is_success():
+                for obj in categories_response.body.get("objects", []):
+                    if obj.get("type") == "CATEGORY" and "category_data" in obj:
+                        categories.append({
+                            "id": obj["id"],
+                            "name": obj["category_data"]["name"]
+                        })
             
-            logger.debug(f"Making request to Google Places API: {url}")
-            response = requests.get(url)
-            data = response.json()
+            # Get items
+            items_response = catalog_api.list_catalog(
+                cursor=None,
+                types=["ITEM"]
+            )
+
+            items = []
+            if items_response.is_success():
+                for obj in items_response.body.get("objects", []):
+                    item = process_square_item(obj, output_format="detail")
+                    if item:
+                        items.append(item)
             
-            if data.get('status') != 'OK':
-                logger.warning(f"Google API error: {data.get('status')}")
-                return Response(
-                    {"error": f"Google API error: {data.get('status')}"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                
-            result = data.get('result', {})
+            return Response({
+                "square_connected": True,
+                "items": items,
+                "categories": categories
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Square items fetch error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'], url_path='items/(?P<item_id>[^/.]+)')
+    def update_item(self, request, item_id=None):
+        """Update a menu item in Square."""
+        business = Business.objects.filter(owner=request.user).first()
+        if not business:
+            return Response({"error": "Business not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        client = get_square_client(business)
+        if not client:
+            return Response({"error": "Square not connected"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            catalog_api = client.catalog
+
+            # Get the item details
+            item_response = catalog_api.retrieve_catalog_object(
+                object_id=item_id, 
+                include_related_objects=True
+            )
             
-            # Extract business details
-            business_data = {
-                'name': result.get('name', ''),
-                'address': result.get('formatted_address', ''),
-                'phone': result.get('formatted_phone_number', ''),
-                'website': result.get('website', ''),
-                'place_id': place_id,
+            if not item_response.is_success():
+                logger.error(f"Failed to retrieve item: {item_response.errors}")
+                return Response({"error": "Failed to retrieve item details"}, status=status.HTTP_400_BAD_REQUEST)
+
+            current_item = item_response.body["object"]
+            latest_version = current_item["version"]
+            current_item_data = current_item.get("item_data", {})
+            
+            # Get variation versions
+            variation_versions = {
+                variation["id"]: variation["version"]
+                for variation in current_item_data.get("variations", [])
+                if "id" in variation and "version" in variation
             }
             
-            # Determine category from types
-            types = result.get('types', [])
-            if 'restaurant' in types:
-                business_data['category'] = 'Restaurant'
-            elif 'cafe' in types:
-                business_data['category'] = 'Cafe'
-            elif 'bar' in types:
-                business_data['category'] = 'Bar'
-            elif 'food' in types:
-                business_data['category'] = 'Takeaway'
+            raw_variations = request.data.get("variations", [])
+            formatted_variations = [
+                {
+                    "type": "ITEM_VARIATION",
+                    "id": v["id"],
+                    "version": variation_versions.get(v["id"]),
+                    "item_variation_data": {
+                        "item_id": item_id,
+                        "name": v["name"],
+                        "pricing_type": "FIXED_PRICING",
+                        "price_money": v["price_money"],
+                        **{k:v for k,v in current_item_data.get("variations", [])[0].get("item_variation_data", {}).items() 
+                        if k not in ["name", "pricing_type", "price_money"]}
+                    }
+                }
+                for v in raw_variations
+            ]
+
+            # Prepare the updated item
+            updated_item = {
+                "idempotency_key": str(uuid.uuid4()),
+                "object": {
+                    "type": "ITEM",
+                    "id": item_id,
+                    "version": latest_version,
+                    "item_data": {
+                        **current_item_data,
+                        "name": request.data.get("name", current_item_data.get("name")),
+                        "description": request.data.get("description", current_item_data.get("description", "")),
+                        "variations": formatted_variations,
+                    }
+                }
+            }
+            logger.debug(f"Update request: {updated_item}")
+            
+            update_response = catalog_api.upsert_catalog_object(body=updated_item)
+            if update_response.is_success():
+                logger.info(f"Item {item_id} updated successfully")
+                return Response({
+                    "message": f"Item {item_id} updated successfully.",
+                    "item": update_response.body
+                }, status=status.HTTP_200_OK)
             else:
-                business_data['category'] = 'Others'
-                
-            # Get photo if available
-            if 'photos' in result and len(result['photos']) > 0:
-                photo_reference = result['photos'][0]['photo_reference']
-                business_data['logo_url'] = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={photo_reference}&key={api_key}"
-            
-            return Response(business_data)
-            
+                logger.error(f"Failed to update item {item_id}: {update_response.errors}")
+                return Response({
+                    "error": "Update failed", 
+                    "details": update_response.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
         except Exception as e:
-            logger.exception(f"Error in GooglePlaceLookupView: {str(e)}")
-            return Response(
-                {"error": f"Error fetching place details: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Square item update error: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+

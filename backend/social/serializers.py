@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import SocialMedia
+
 from config.constants import SOCIAL_PLATFORMS
+
+from .models import SocialMedia
 
 class SocialMediaSerializer(serializers.ModelSerializer):
     key = serializers.CharField(source="platform")

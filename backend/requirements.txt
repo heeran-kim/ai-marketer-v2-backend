@@ -6,7 +6,6 @@ charset-normalizer==3.4.1
 click==8.1.8
 Django==5.1.6
 djangorestframework==3.15.2
-djangorestframework_simplejwt==5.4.0
 dnspython==2.7.0
 email_validator==2.2.0
 fastapi==0.115.8
@@ -72,3 +71,8 @@ drf-spectacular
 pyotp
 qrcode
 Fernet
+squareup==41.0.0.20250319
+openai
+cryptography==44.0.2
+celery
+redis>=4.0

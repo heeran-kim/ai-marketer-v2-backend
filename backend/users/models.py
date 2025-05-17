@@ -1,7 +1,9 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
-from .managers import UserManager
+
 from config.constants import ROLE_CHOICES, DEFAULT_ROLE
+
+from .managers import UserManager
 
 class User(AbstractBaseUser, PermissionsMixin):
     """Custom User model using email as the unique identifier."""
@@ -18,13 +20,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(auto_now_add=True) # Stores when the user registered
     requires_2fa = models.BooleanField(default=False) # Boolean for if the user is using 2FA
     secret_2fa = models.CharField(max_length=255,blank=True,null=True) #The field for storing the TOTP
+
     
-    access_token = models.CharField(max_length=512, blank=True, null=True) 
+    access_token = models.CharField(max_length=512,blank=True, null=True) # Store the access token for Meta
     has_password = models.BooleanField(default=True)  # If user has set a password
     google_id = models.CharField(max_length=255, blank=True, null=True)
     facebook_id = models.CharField(max_length=255, blank=True, null=True)
     apple_id = models.CharField(max_length=255, blank=True, null=True)
     
+
     objects = UserManager() # Assign custom UserManager for object creation
 
     USERNAME_FIELD = "email" # Use email as the unique login field
@@ -45,4 +49,31 @@ class User(AbstractBaseUser, PermissionsMixin):
     def get_short_name(self):
         return self.name
     
-    
+
+class EmailConfiguration(models.Model):
+    """Model for storing configurable email backend settings."""
+
+    name = models.CharField(max_length=100, default="Default Configuration")
+    email_backend = models.CharField(max_length=255, default='django.core.mail.backends.smtp.EmailBackend')
+    email_host = models.CharField(max_length=255)
+    email_port = models.IntegerField(default=587)
+    email_use_tls = models.BooleanField(default=True)
+    email_host_user = models.CharField(max_length=255)
+    email_host_password = models.CharField(max_length=255)
+    default_from_email = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Email Configuration'
+        verbose_name_plural = 'Email Configurations'
+
+    def save(self, *args, **kwargs):
+        # When a new configuration is made active, deactivate all others
+        if self.is_active:
+            EmailConfiguration.objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.name} ({self.email_host_user})"

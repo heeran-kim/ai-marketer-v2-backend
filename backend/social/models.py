@@ -1,5 +1,7 @@
 from django.db import models
-#from businesses.models import Business
+
+from businesses.models import Business
+
 from config.constants import SOCIAL_PLATFORMS
 
 class SocialMedia(models.Model):

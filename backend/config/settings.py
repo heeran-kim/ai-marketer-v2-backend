@@ -10,10 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+from datetime import timedelta
 import os
 from pathlib import Path
-from datetime import timedelta
+
 import dj_database_url
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,7 +23,6 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 if not os.getenv("DOCKER_RUNNING"):
-    from dotenv import load_dotenv
     load_dotenv()
 
 # Quick-start development settings - unsuitable for production
@@ -35,6 +36,57 @@ if not SECRET_KEY:
 TWOFA_ENCRYPTION_KEY = os.getenv("TWOFA_ENCRYPTION_KEY")
 if not TWOFA_ENCRYPTION_KEY:
     raise ValueError("TWOFA_ENCRYPTION_KEY environment variable is not set.")
+
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
+if not FACEBOOK_APP_ID:
+    raise ValueError("FACEBOOK_APP_ID environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_SECRET = os.getenv("FACEBOOK_SECRET")
+if not FACEBOOK_SECRET:
+    raise ValueError("FACEBOOK_SECRET environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+if not FACEBOOK_REDIRECT_URI:
+    raise ValueError("FACEBOOK_REDIRECT_URI environment variable is not set. Read Dan's documentation or just put random letters for now to bypass this error!")
+
+SQUARE_ENV = os.getenv("SQUARE_ENV", "sandbox")
+if SQUARE_ENV == "sandbox":
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_SANDBOX")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_SANDBOX")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_SANDBOX")
+else:
+    SQUARE_APP_ID = os.getenv("SQUARE_APP_ID_PROD")
+    SQUARE_APP_SECRET = os.getenv("SQUARE_APP_SECRET_PROD")
+    SQUARE_BASE_URL = os.getenv("SQUARE_BASE_URL_PROD")
+
+if not SQUARE_APP_ID:
+    raise ValueError("SQUARE_APP_ID environment variable is not set.")
+
+if not SQUARE_APP_SECRET:
+    raise ValueError("SQUARE_APP_SECRET environment variable is not set.")
+
+SQUARE_REDIRECT_URI = os.getenv("SQUARE_REDIRECT_URI")
+if not SQUARE_REDIRECT_URI:
+    raise ValueError("SQUARE_REDIRECT_URI environment variable is not set.")
+
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL")
+if not FRONTEND_BASE_URL:
+    raise ValueError("FRONTEND_BASE_URL environment variable is not set.")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY environment variable is not set.")
+
+IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
+if not IMGUR_CLIENT_ID:
+    raise ValueError("IMGUR_CLIENT_ID environment variable is not set.")
+
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+if not DISCORD_WEBHOOK_URL:
+    raise ValueError("DISCORD_WEBHOOK_URL environment variable is not set.")
+
+TEMP_MEDIA_DISCORD_WEBHOOK = os.getenv("TEMP_MEDIA_DISCORD_WEBHOOK", "False") == "True"
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -68,14 +120,11 @@ INSTALLED_APPS = [
 
 # JWT Settings
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=1), # Access Token expiration time
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7), # Refresh Token expiration time
-    "ROTATE_REFRESH_TOKENS": True, # Issue a new Refresh Token when issuing a new Access Token
-    "BLACKLIST_AFTER_ROTATION": True, # Invalidate the previous Refresh Token after rotation
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "AUTH_HEADER_TYPES": ("Bearer",),
 
     # HttpOnly Cookie
-    "AUTH_COOKIE": "access_token", # Cookie name for storing the Access Token
+    "AUTH_COOKIE": "access_token",
     "AUTH_COOKIE_HTTP_ONLY": True,
     "AUTH_COOKIE_SECURE": True,
     "AUTH_COOKIE_PATH": "/",
@@ -83,6 +132,7 @@ SIMPLE_JWT = {
 }
 
 SESSION_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
+SESSION_COOKIE_SAMESITE = "None"
 
 # CSRF Settings
 CSRF_COOKIE_SECURE = SIMPLE_JWT["AUTH_COOKIE_SECURE"]
@@ -93,7 +143,7 @@ CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "https://localhost:3000
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "https://localhost:3000,https://127.0.0.1:3000"
+    "https://localhost:3000,https://127.0.0.1:3000,https://ai-marketer-v2-frontend.vercel.app"
 ).split(",")
 
 # DRF Default Authentication Settings
@@ -102,44 +152,6 @@ REST_FRAMEWORK = {
         "users.authentication.CustomJWTAuthentication", # http cookie
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-}
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'AI Marketer V2 API',
-    'DESCRIPTION': 'API documentation for AI Marketer V2, an AI-powered marketing automation platform for restaurants and small businesses.',
-    'VERSION': '1.0.0',
-
-    # Explicitly define tag order and descriptions
-    'TAGS': [
-        {
-            'name': 'users',
-            'description': 'User authentication and account management endpoints. Includes traditional register, login, and logout functionality with JWT tokens stored in HTTP-only cookies. Current implementation supports email-based authentication. Planned future enhancements include forgot password, social media logins (Google, Facebook, Apple), passkey support (Face ID/fingerprint), and 2FA.'
-        },
-        {
-            'name': 'businesses',
-            'description': 'Business profile management for restaurant configuration. Enables business owners to set up and customize their business profile including name, logo, business category, target customers, and business branding/vibe. The current implementation supports basic business information management. Future enhancements will include social media integration and bulk sales data uploads.'
-        },
-        {
-            'name': 'dashboard',
-            'description': 'Business dashboard data and metrics. Provides an overview of key business metrics including post statistics, linked social platforms, and recent activity. Current implementation shows basic business metrics and post summary.'
-        },
-        {
-            'name': 'posts',
-            'description': 'Social media post management system. Allows creating, scheduling, and monitoring posts across multiple platforms. Current implementation supports storing and displaying posts in the database and scheduling functionality. Future features will add social media API integration for live post fetching, automatic publishing of scheduled posts, editing capabilities, comment interaction, and Discord webhook notifications.'
-        },
-        {
-            'name': 'promotions',
-            'description': 'Marketing promotion management. Enables businesses to create, track, and analyze promotional campaigns. Current implementation includes viewing promotions and creating posts from promotions. Future enhancements will add AI-driven promotion suggestions based on sales data and social media trends.'
-        },
-        {
-            'name': 'social',
-            'description': 'Social media platform integration endpoints. Provides functionality to connect, manage, and interact with various social media platforms. Includes linking social accounts to businesses, fetching platform-specific data, and enabling cross-platform publishing capabilities. Current implementation supports platform connection setup. Future enhancements will include direct comment management, social activity notifications, engagement analytics, and Discord webhook integration for real-time alerts.'
-        },
-        {
-            'name': 'ai',
-            'description': 'AI-powered content creation tools. Provides machine learning capabilities for analyzing images, generating captions, and suggesting hashtags. Frontend implementation of image analysis and caption generation is complete, but backend AI integration is under development. Uses ChatGPT API for natural language processing and will support multi-platform content publishing.'
-        }
-    ],
 }
 
 # Middleware Settings
@@ -177,9 +189,17 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+
+    "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
+    if os.getenv("USE_RENDER_DB", "False") == "True"
+    else {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB"),
+        "USER": os.getenv("POSTGRES_USER"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+        "HOST": os.getenv("POSTGRES_HOST"),
+        "PORT": os.getenv("POSTGRES_PORT"),
+
     }
 }
 
@@ -248,6 +268,18 @@ AUTH_USER_MODEL = 'users.User'
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+# Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = 'akastudioaimarketer@gmail.com'
+EMAIL_HOST_PASSWORD = 'sibo nkqr khpp yxwr'
+DEFAULT_FROM_EMAIL = 'AI Marketer <akastudioaimarketer@gmail.com>'
+
+# Logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
