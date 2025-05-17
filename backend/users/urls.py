@@ -3,6 +3,7 @@ from django.urls import path
 
 from .views import (
     Check2FA,
+    DeleteAccountView,
     Enable2FA,
     ForgotPasswordView,
     LoginView,
@@ -18,6 +19,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('me/', UserProfileView.as_view(), name='user-profile'),
     path('logout/', LogoutView.as_view(), name='logout'),
+    path('delete/', DeleteAccountView.as_view(), name='delete'),
     path('password/forgot/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('password/reset/', ResetPasswordView.as_view(), name='reset-password'),
     

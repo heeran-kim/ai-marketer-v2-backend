@@ -131,6 +131,25 @@ class LogoutView(APIView):
 
         return response
 
+class DeleteAccountView(APIView):
+    """
+    API for deleting a user account.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        """
+        Deletes the authenticated user's account.
+        """
+        user = request.user
+        user.delete()
+        response = Response({"message": "Account deleted successfully"}, status=status.HTTP_200_OK)
+        response.delete_cookie(
+            settings.SIMPLE_JWT["AUTH_COOKIE"],
+            path=settings.SIMPLE_JWT["AUTH_COOKIE_PATH"],
+            samesite=settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"],
+        )
+        return response
 
 class ForgotPasswordView(GenericAPIView):
     permission_classes = [AllowAny]
@@ -143,7 +162,6 @@ class ForgotPasswordView(GenericAPIView):
         serializer.save()
         return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
 
-
 class ResetPasswordView(GenericAPIView):
     permission_classes = [AllowAny]
     parser_classes = [JSONParser]
@@ -154,7 +172,6 @@ class ResetPasswordView(GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"message": "Password has been reset"}, status=status.HTTP_200_OK)
-
 
 class Check2FA(APIView):
     # permission_classes = [AllowAny]
