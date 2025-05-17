@@ -28,7 +28,6 @@ from utils.discord_api import upload_image_file_to_discord
 from utils.square_api import get_square_menu_items
 
 TWOFA_ENCRYPTION_KEY = settings.TWOFA_ENCRYPTION_KEY
-IMGUR_CLIENT_ID = settings.IMGUR_CLIENT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -331,30 +330,12 @@ class PostListCreateView(ListCreateAPIView):
         return resized
 
     def upload_image_file(self,image_file,aspectRatio):
-        #Get Image setup
-        headers = {
-            'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
-        }
-
-        #image_file.file.seek(0)
         img = Image.open(image_file)
         if(aspectRatio == "1/1"):
             img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
         else:
             img = self.crop_center_resize(img) # 4:5 portrait
-        # Save to in-memory buffer
-        buffer = io.BytesIO()
-        img.save(buffer, format='JPEG')
-        buffer.seek(0)
-        files = {'image': ('image.jpg', buffer, 'image/jpeg')}
-        response = requests.post(
-            'https://api.imgur.com/3/image',
-            headers=headers,
-            files=files
-        )
-        if response.status_code != 200:
-            return {"error": f"Unable to upload to Imgur | text:{response.text}", "status": False}
-        image_url = response.json()['data']['link']
+        image_url = upload_image_file_to_discord(img)
         return image_url
 
     def get(self, request, *args, **kwargs):
@@ -787,30 +768,12 @@ class PostDetailView(APIView):
         return Response(serializer.data)
     
     def upload_image_file(self,image_file,aspectRatio):
-        #Get Image setup
-        headers = {
-            'Authorization': f'Client-ID {IMGUR_CLIENT_ID}',
-        }
-
-        #image_file.file.seek(0)
         img = Image.open(image_file)
         if(aspectRatio == "1/1"):
             img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
         else:
             img = self.crop_center_resize(img) # 4:5 portrait
-        # Save to in-memory buffer
-        buffer = io.BytesIO()
-        img.save(buffer, format='JPEG')
-        buffer.seek(0)
-        files = {'image': ('image.jpg', buffer, 'image/jpeg')}
-        response = requests.post(
-            'https://api.imgur.com/3/image',
-            headers=headers,
-            files=files
-        )
-        if response.status_code != 200:
-            return {"error": f"Unable to upload to Imgur | text:{response.text}", "status": False}
-        image_url = response.json()['data']['link']
+        image_url = upload_image_file_to_discord(img)
         return image_url
 
     def crop_center_resize(self, image, target_width=1080, target_height=1350):
