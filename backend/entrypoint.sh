@@ -2,6 +2,12 @@
 
 set -e  # Exit immediately if a command fails
 
+if [ "$1" = "celery" ]; then
+  shift
+  exec celery -A config.celery_app.app worker "$@"
+  return
+fi
+
 ENV_FILE="/app/.env"
 echo "🚀 Starting AI Marketer Backend Service"
 
