@@ -1,4 +1,5 @@
 import io
+import os
 import json
 import logging
 from datetime import datetime
@@ -88,25 +89,12 @@ class PostListCreateView(ListCreateAPIView):
         media_type=post_data.get('media_type') if platform=="instagram" else "IMAGE" #Image for facebook
         image_url=None
         if media_type == "IMAGE" or media_type == "CAROUSEL_ALBUM":
-            image_url = post_data.get('media_url') if platform == "instagram" else post_data.get('full_picture')
+            return post_data.get('media_url') if platform == "instagram" else post_data.get('full_picture')
         elif media_type == "VIDEO" and platform == "instagram":
-            image_url = post_data.get('thumbnail_url')
+            return post_data.get('thumbnail_url')
         else:
-            return "/app/media/No_Image_Available.jpg"
-        # Download the image and save it
-        response = requests.get(image_url)
-
-        if response.status_code == 200:
-            if settings.TEMP_MEDIA_DISCORD_WEBHOOK:
-                discord_image_url = upload_image_file_to_discord(response.content)['image_url']
-                return discord_image_url
-            else:
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
-                return save_path
-        else:
-            return "/app/media/No_Image_Available.jpg"
-
+            return "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg"
+        
     def remove_deleted_posts(self,platform,posts_data,business):
         platform_obj = SocialMedia.objects.get(platform=platform)
 
@@ -170,28 +158,28 @@ class PostListCreateView(ListCreateAPIView):
                 found_post.save()
                 continue
             # Create a new Post object
-            file_path= self.save_meta_image(post_data,f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg",platform)
+            image_url= self.save_meta_image(post_data,f"/app/media/business_posts/{business.id}/{post_data.get('id')}.jpg",platform)
             comments= post_data.get("comments", 0)
             comment_count=len(post_data.get("comments").get("data")) if comments else 0
             caption=post_data.get("caption") if platform=='instagram' else post_data.get("message")
-            with open(file_path, 'rb') as f:
-                django_file = File(f)
-                post = Post(
-                    business=business,
-                    platform=SocialMedia.objects.get(platform=platform),
-                    caption=caption if caption else "",
-                    link=link,
-                    post_id=post_data.get("id"),
-                    posted_at=post_data.get("timestamp") if platform=='instagram' else post_data.get("created_time"),
-                    image=django_file,
-                    scheduled_at=None,
-                    status='Published',
-                    promotion=None,
-                    reactions=post_data.get("like_count", 0) if platform=='instagram' else post_data.get('likes').get('summary').get('total_count'),
-                    comments=comment_count #if platform=='instagram' else post_data.get('comments').get('summary').get('total_count') not working atm
-                )
-                # Save the post to the database
-                post.save()
+
+            post = Post(
+                business=business,
+                platform=SocialMedia.objects.get(platform=platform),
+                caption=caption if caption else "",
+                link=link,
+                post_id=post_data.get("id"),
+                posted_at=post_data.get("timestamp") if platform=='instagram' else post_data.get("created_time"),
+                #image=django_file,
+                image_url=image_url,
+                scheduled_at=None,
+                status='Published',
+                promotion=None,
+                reactions=post_data.get("like_count", 0) if platform=='instagram' else post_data.get('likes').get('summary').get('total_count'),
+                comments=comment_count #if platform=='instagram' else post_data.get('comments').get('summary').get('total_count') not working atm
+            )
+            # Save the post to the database
+            post.save()
 
         self.remove_deleted_posts(platform,posts_data,business)
 
@@ -335,7 +323,7 @@ class PostListCreateView(ListCreateAPIView):
             img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
         else:
             img = self.crop_center_resize(img) # 4:5 portrait
-        image_url = upload_image_file_to_discord(img)
+        image_url = upload_image_file_to_discord(img)['image_url']
         return image_url
 
     def get(self, request, *args, **kwargs):
@@ -773,7 +761,7 @@ class PostDetailView(APIView):
             img = self.crop_center_resize(img,1080,1080) # 1:1 portrait
         else:
             img = self.crop_center_resize(img) # 4:5 portrait
-        image_url = upload_image_file_to_discord(img)
+        image_url = upload_image_file_to_discord(img)['image_url']
         return image_url
 
     def crop_center_resize(self, image, target_width=1080, target_height=1350):

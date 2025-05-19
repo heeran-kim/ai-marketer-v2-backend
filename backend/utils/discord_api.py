@@ -1,6 +1,9 @@
 import logging
 import os
 import requests
+import uuid
+from PIL import Image
+from io import BytesIO
 
 from django.conf import settings
 
@@ -22,11 +25,22 @@ def upload_image_file_to_discord(image_file):
     
     message_id = None
     image_url = None
+
+        # Convert bytes to PIL Image if needed
+    if isinstance(image_file, bytes):
+        image = Image.open(BytesIO(image_file))
+    else:
+        image = image_file  # already a PIL Image
+
+    #Convert PIL Image to bytes
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG")
+    image_bytes = buffer.getvalue()
     
-    temp_file_path = f"/tmp/{image_file.name}"
-    with open(temp_file_path, 'wb+') as temp_file:
-        for chunk in image_file.chunks():
-            temp_file.write(chunk)
+    #temp_file_path = f"/tmp/{image_file.name}"
+    temp_file_path = f"/tmp/{uuid.uuid4().hex}.jpg"
+    with open(temp_file_path, 'wb') as temp_file:
+        temp_file.write(image_bytes)
 
 
     with open(temp_file_path, 'rb') as image_file:
