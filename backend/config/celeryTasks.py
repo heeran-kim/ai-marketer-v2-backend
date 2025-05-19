@@ -133,8 +133,8 @@ def publishToMeta(platform, caption, image_url, token_decoded):
 
 @shared_task
 def publish_to_meta_task(platform,caption,image,token):
-    logger.error("Scheduled task recieved!")
+    logger.error("Note this is not an actual error: Scheduled task recieved!")
     error=publishToMeta(platform,caption,image,token)
     if(error.get('error')):
         logger.error(error.get('error'))
-    logger.error(f"Scheduled task ran at: {datetime.now()}")
+    logger.error(f"Note this is not an actual error: Scheduled task ran at: {datetime.now()}")
